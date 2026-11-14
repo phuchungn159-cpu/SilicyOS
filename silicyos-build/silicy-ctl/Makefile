@@ -3,7 +3,9 @@
 # Target Compiler Command: clang -O3 -mcpu=apple-m1 -flto=thin -s
 # ==============================================================================
 
-CC       ?= clang
+ifeq ($(origin CC),default)
+CC       := clang
+endif
 UNAME_S  := $(shell uname -s)
 PREFIX   ?= /usr/local
 BINDIR   ?= $(PREFIX)/bin
