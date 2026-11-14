@@ -35,7 +35,7 @@ limactl shell "${VM_NAME}" sudo bash -c "
     set -euo pipefail
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
-    apt-get install -y arch-install-scripts pacman-package-manager btrfs-progs dosfstools zip unzip rsync zstd curl jq udev clang lld make zsh python3
+    apt-get install -y arch-install-scripts pacman-package-manager btrfs-progs dosfstools zip unzip rsync zstd curl jq udev clang lld make zsh python3 aria2 libarchive-tools
     rm -rf /var/tmp/silicyos-build /tmp/silicyos-apple-silicon.zip
     mkdir -p /var/tmp/silicyos-build
     rsync -a --exclude='silicyos-apple-silicon.zip' '${SCRIPT_DIR}/' /var/tmp/silicyos-build/

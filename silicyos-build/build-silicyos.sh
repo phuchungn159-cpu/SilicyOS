@@ -76,28 +76,31 @@ else
         fi
         cp -a "${STAGE_ROOT}/var/lib/pacman/sync/." "${SEED_CACHE_DIR}/rootfs/var/lib/pacman/sync/" 2>/dev/null || true
     else
-        echo "  -> Non-Asahi builder host detected; seeding 16K ARM64 base from official Asahi ALARM Btrfs image..."
-        SEED_ZIP="${WORK_DIR}/asahi-base-btrfs.zip"
-        mkdir -p "${WORK_DIR}/seed"
-        curl -L --fail --retry 3 -o "${SEED_ZIP}" "https://asahi-alarm.org/asahi-base-btrfs.zip"
-        unzip -q "${SEED_ZIP}" -d "${WORK_DIR}/seed"
-        rm -f "${SEED_ZIP}"
-
-        mkdir -p "${WORK_DIR}/seed-mnt" "${SEED_CACHE_DIR}/rootfs" "${SEED_CACHE_DIR}/esp-seed"
-        if [[ -d "${WORK_DIR}/seed/esp" ]]; then
-            cp -a "${WORK_DIR}/seed/esp/." "${WORK_DIR}/esp-seed/"
-            cp -a "${WORK_DIR}/seed/esp/." "${SEED_CACHE_DIR}/esp-seed/"
-        fi
-        mount -o loop,ro "${WORK_DIR}/seed/root.img" "${WORK_DIR}/seed-mnt"
-        if [[ -d "${WORK_DIR}/seed-mnt/@/etc" ]]; then
-            rsync -aHAX --numeric-ids "${WORK_DIR}/seed-mnt/@/" "${STAGE_ROOT}/"
-            rsync -aHAX --numeric-ids "${WORK_DIR}/seed-mnt/@/" "${SEED_CACHE_DIR}/rootfs/"
+        echo "  -> Non-Asahi builder host detected; seeding ARM64 base from ArchLinuxARM + Asahi GitHub Releases CDN..."
+        SEED_TAR="${WORK_DIR}/ArchLinuxARM-aarch64-latest.tar.gz"
+        SEED_URL="http://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz"
+        mkdir -p "${WORK_DIR}/seed" "${SEED_CACHE_DIR}/rootfs" "${SEED_CACHE_DIR}/esp-seed"
+        if command -v aria2c >/dev/null 2>&1; then
+            aria2c -x 8 -s 8 -k 1M --file-allocation=none --allow-overwrite=true \
+                -d "${WORK_DIR}" -o "ArchLinuxARM-aarch64-latest.tar.gz" "${SEED_URL}"
         else
-            rsync -aHAX --numeric-ids "${WORK_DIR}/seed-mnt/" "${STAGE_ROOT}/"
-            rsync -aHAX --numeric-ids "${WORK_DIR}/seed-mnt/" "${SEED_CACHE_DIR}/rootfs/"
+            curl -L --fail --retry 3 -o "${SEED_TAR}" "${SEED_URL}"
         fi
-        umount "${WORK_DIR}/seed-mnt"
-        rm -rf "${WORK_DIR}/seed"
+
+        if command -v bsdtar >/dev/null 2>&1; then
+            bsdtar -xpf "${SEED_TAR}" -C "${STAGE_ROOT}"
+        else
+            tar --numeric-owner -xpf "${SEED_TAR}" -C "${STAGE_ROOT}"
+        fi
+        rm -f "${SEED_TAR}"
+
+        mkdir -p "${STAGE_ROOT}/etc/pacman.d"
+        cat <<'EOF' > "${STAGE_ROOT}/etc/pacman.d/mirrorlist.asahi-alarm"
+# Asahi Linux repository mirrorlist (GitHub Releases CDN)
+Server = https://github.com/asahi-alarm/asahi-alarm/releases/download/$arch
+EOF
+
+        rsync -aHAX --numeric-ids "${STAGE_ROOT}/" "${SEED_CACHE_DIR}/rootfs/"
     fi
 fi
 
@@ -130,7 +133,13 @@ cp -L /etc/resolv.conf "${STAGE_ROOT}/etc/resolv.conf"
 arch-chroot "${STAGE_ROOT}" /bin/bash -c "
     set -e
     pacman-key --init 2>/dev/null || true
-    pacman-key --populate archlinuxarm asahi 2>/dev/null || pacman-key --populate 2>/dev/null || true
+    pacman-key --populate archlinuxarm 2>/dev/null || pacman-key --populate 2>/dev/null || true
+    if ! pacman -Q asahi-alarm-keyring >/dev/null 2>&1; then
+        sed 's/^SigLevel.*/SigLevel = Never/' /etc/pacman.conf > /tmp/pacman-asahi-bootstrap.conf
+        pacman --config /tmp/pacman-asahi-bootstrap.conf -Sy --noconfirm asahi-alarm-keyring 2>/dev/null || true
+        rm -f /tmp/pacman-asahi-bootstrap.conf
+    fi
+    pacman-key --populate archlinuxarm asahi-alarm asahi 2>/dev/null || pacman-key --populate 2>/dev/null || true
     pacman -Sy --noconfirm
     pacman -Rdd --noconfirm systemd-resolvconf 2>/dev/null || true
     AVAIL_PKGS=\$(comm -12 <(pacman -Slq | sort -u) <(printf '%s\n' ${PKG_LIST[*]} | sort -u))
