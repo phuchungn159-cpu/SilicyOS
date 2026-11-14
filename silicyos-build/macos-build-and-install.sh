@@ -36,19 +36,19 @@ limactl shell "${VM_NAME}" sudo bash -c "
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
     apt-get install -y arch-install-scripts pacman-package-manager btrfs-progs dosfstools zip unzip rsync zstd curl jq udev clang lld make zsh python3 aria2 libarchive-tools
-    rm -rf /var/tmp/silicyos-build /tmp/silicyos-apple-silicon.zip
+    rm -rf /var/tmp/silicyos-build /var/tmp/silicyos-apple-silicon.zip
     mkdir -p /var/tmp/silicyos-build
     rsync -a --exclude='silicyos-apple-silicon.zip' '${SCRIPT_DIR}/' /var/tmp/silicyos-build/
     cd /var/tmp/silicyos-build
     ./verify-silicyos.sh
     ./build-silicyos.sh
-    cp -f /var/tmp/silicyos-build/silicyos-apple-silicon.zip /tmp/silicyos-apple-silicon.zip
-    chmod 0644 /tmp/silicyos-apple-silicon.zip
+    mv -f /var/tmp/silicyos-build/silicyos-apple-silicon.zip /var/tmp/silicyos-apple-silicon.zip
+    chmod 0644 /var/tmp/silicyos-apple-silicon.zip
     rm -rf /var/tmp/silicyos-build
 "
 
 # Copy built archive back to macOS host reliably (works regardless of virtiofs mount mode)
-limactl cp "${VM_NAME}:/tmp/silicyos-apple-silicon.zip" "${OUT_ZIP}"
+limactl cp "${VM_NAME}:/var/tmp/silicyos-apple-silicon.zip" "${OUT_ZIP}"
 
 # 3. Stop and remove temporary builder VM to reclaim all APFS space before partitioning
 echo "[3/4] Dọn dẹp máy ảo tạm (${VM_NAME}) để trả lại dung lượng trống cho APFS..."
