@@ -1,0 +1,440 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# /usr/local/bin/silicy-macos-bridge
+# silicyOS Safe macOS <-> Linux Data Bridge (APFS Read-Only Safe Mode + Shared)
+# Mount Target: /run/media/$USER/macOS (Strict Read-Only via apfs-fuse/fsapfsmount)
+# ==============================================================================
+set -euo pipefail
+
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+TARGET_USER="${SUDO_USER:-${USER:-silicy}}"
+if [[ "${TARGET_USER}" == "root" ]] && id -u silicy >/dev/null 2>&1; then
+    TARGET_USER="silicy"
+fi
+TARGET_UID="$(id -u "${TARGET_USER}" 2>/dev/null || printf "1000")"
+TARGET_GID="$(id -g "${TARGET_USER}" 2>/dev/null || printf "1000")"
+TARGET_HOME="$(getent passwd "${TARGET_USER}" 2>/dev/null | cut -d: -f6 || printf "/home/%s" "${TARGET_USER}")"
+
+MACOS_MNT="${SILICY_MACOS_MNT:-/run/media/${TARGET_USER}/macOS}"
+SHARED_MNT="${SILICY_SHARED_MNT:-/run/media/${TARGET_USER}/Shared}"
+SIMULATE="${SILICY_BRIDGE_SIMULATE:-0}"
+NO_GUI=0
+
+log_info() {
+    printf "[silicy-macos-bridge] %s\n" "$1"
+}
+
+log_err() {
+    printf "[silicy-macos-bridge] ERROR: %s\n" "$1" >&2
+}
+
+notify_osd() {
+    local msg="$1"
+    if [[ "${NO_GUI}" -eq 1 ]]; then
+        return 0
+    fi
+    if command -v swayosd-client >/dev/null 2>&1 && [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        swayosd-client --custom-icon "folder-remote-symbolic" --custom-message "macOS Bridge: ${msg}" >/dev/null 2>&1 || true
+    fi
+    if command -v notify-send >/dev/null 2>&1 && [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+        notify-send -a "silicyOS macOS Bridge" -i "folder-remote-symbolic" "macOS Data Bridge" "${msg}" >/dev/null 2>&1 &
+    fi
+}
+
+run_self_elevated() {
+    local bridge_bin="/usr/local/bin/silicy-macos-bridge"
+    if [[ ! -x "${bridge_bin}" ]]; then
+        bridge_bin="$0"
+    fi
+    if sudo -n "${bridge_bin}" "$@" 2>/dev/null; then
+        return 0
+    fi
+    sudo "${bridge_bin}" "$@"
+}
+
+detect_apfs_partition() {
+    if [[ -n "${SILICY_APFS_DEV:-}" ]]; then
+        printf "%s\n" "${SILICY_APFS_DEV}"
+        return 0
+    fi
+
+    local dev=""
+    # 1. Inspect GPT Partition Type UUID for primary Apple APFS (7C3457EF-0000-11AA-AA11-00306543ECAC),
+    #    explicitly excluding iBootSystemContainer and RecoveryOSContainer even when PARTLABEL contains spaces,
+    #    and picking the largest APFS container (Macintosh HD / Data).
+    local awk_prog='
+        tolower($2) == "7c3457ef-0000-11aa-aa11-00306543ecac" {
+            label = "";
+            for (i = 4; i <= NF; i++) {
+                label = label " " $i;
+            }
+            if (tolower(label) !~ /iboot|recovery/) {
+                if (($3 + 0) > max_sz) { max_sz = ($3 + 0); best = $1 }
+            }
+        }
+        END { if (best != "") print best }
+    '
+
+    if [[ -n "${SILICY_LSBLK_FILE:-}" && -r "${SILICY_LSBLK_FILE}" ]]; then
+        dev="$(awk "${awk_prog}" "${SILICY_LSBLK_FILE}")"
+        if [[ -n "${dev}" ]]; then
+            printf "%s\n" "${dev}"
+            return 0
+        fi
+    elif command -v lsblk >/dev/null 2>&1; then
+        dev="$(lsblk -b -pnlo NAME,PARTTYPE,SIZE,PARTLABEL 2>/dev/null | awk "${awk_prog}" || true)"
+        if [[ -n "${dev}" && -b "${dev}" ]]; then
+            printf "%s\n" "${dev}"
+            return 0
+        fi
+    fi
+
+    # 2. Check blkid for APFS filesystem signature, preferring nvme0n1p2 over nvme0n1p1 (iBootSystemContainer)
+    local cand=""
+    while IFS= read -r cand; do
+        [[ -z "${cand}" ]] && continue
+        if [[ "${cand}" != *p1 && -b "${cand}" ]]; then
+            printf "%s\n" "${cand}"
+            return 0
+        fi
+        [[ -z "${dev}" && -b "${cand}" ]] && dev="${cand}"
+    done < <(blkid -t TYPE="apfs" -o device 2>/dev/null || true)
+
+    if [[ -n "${dev}" && -b "${dev}" ]]; then
+        printf "%s\n" "${dev}"
+        return 0
+    fi
+
+    # 3. Fallback: standard Apple Silicon primary macOS Data container (/dev/nvme0n1p2)
+    if [[ -b /dev/nvme0n1p2 ]]; then
+        printf "/dev/nvme0n1p2\n"
+        return 0
+    fi
+
+    return 1
+}
+
+detect_apfs_volume_id() {
+    local apfs_dev="$1"
+    if [[ -n "${SILICY_APFS_VOL_ID:-}" ]]; then
+        printf "%s\n" "${SILICY_APFS_VOL_ID}"
+        return 0
+    fi
+
+    local util_out=""
+    if [[ -n "${SILICY_APFSUTIL_FILE:-}" && -r "${SILICY_APFSUTIL_FILE}" ]]; then
+        util_out="$(cat "${SILICY_APFSUTIL_FILE}")"
+    elif command -v apfsutil >/dev/null 2>&1 && [[ -b "${apfs_dev}" ]]; then
+        util_out="$(apfsutil "${apfs_dev}" 2>/dev/null || true)"
+    fi
+
+    [[ -z "${util_out}" ]] && return 0
+
+    printf "%s\n" "${util_out}" | awk '
+        /^Volume[[:space:]]+[0-9]+/ {
+            vol = $2;
+            name = "";
+            role = "";
+            if (!(vol in seen)) {
+                seen[vol] = 1;
+                order[++cnt] = vol;
+            }
+            next;
+        }
+        vol != "" && /^[[:space:]]*Role:/ {
+            sub(/^[[:space:]]*Role:[[:space:]]*/, "", $0);
+            roles[vol] = $0;
+            next;
+        }
+        vol != "" && /^[[:space:]]*Name:/ {
+            sub(/^[[:space:]]*Name:[[:space:]]*/, "", $0);
+            names[vol] = $0;
+            next;
+        }
+        END {
+            for (i = 1; i <= cnt; i++) {
+                v = order[i];
+                if (tolower(roles[v]) ~ /(^|[^a-z])data([^a-z]|$)/) {
+                    print v;
+                    exit;
+                }
+            }
+            for (i = 1; i <= cnt; i++) {
+                v = order[i];
+                if (tolower(names[v]) ~ / - data$/ || tolower(names[v]) == "data") {
+                    print v;
+                    exit;
+                }
+            }
+            for (i = 1; i <= cnt; i++) {
+                v = order[i];
+                n = tolower(names[v]);
+                if (n != "" && n !~ /^(preboot|recovery|vm|update|iscpreboot|hardware|xarts)$/) {
+                    print v;
+                    exit;
+                }
+            }
+        }
+    '
+}
+
+mount_macos_ro() {
+    if [[ "${SIMULATE}" == "1" ]]; then
+        mkdir -p "${MACOS_MNT}/Users"
+        local sim_dev="nvme0n1p2"
+        local sim_vol="0"
+        sim_dev="$(detect_apfs_partition 2>/dev/null || printf "/dev/nvme0n1p2")"
+        sim_vol="$(detect_apfs_volume_id "${sim_dev}" 2>/dev/null || true)"
+        [[ -z "${sim_vol}" ]] && sim_vol="0"
+        printf "MOUNT_MODE=ro\nFS=apfs-fuse\nDEVICE=%s\nVOLUME_ID=%s\nTARGET=%s\n" "${sim_dev}" "${sim_vol}" "${MACOS_MNT}" > "${MACOS_MNT}/.bridge-ro-state"
+        log_info "Simulated Read-Only APFS mount of ${sim_dev} (vol ${sim_vol}) at ${MACOS_MNT}"
+        return 0
+    fi
+
+    if [[ "${EUID}" -ne 0 ]]; then
+        local -a elev_args=(--no-gui)
+        if [[ -n "${SILICY_APFS_VOL_ID:-}" ]]; then
+            elev_args+=(--vol "${SILICY_APFS_VOL_ID}")
+        fi
+        elev_args+=(mount)
+        run_self_elevated "${elev_args[@]}"
+        local rc=$?
+        if [[ "${rc}" -eq 0 ]]; then
+            notify_osd "Mounted macOS APFS (Read-Only Safe Mode) at ${MACOS_MNT}"
+        else
+            notify_osd "Mount failed (if FileVault encrypted, unlock in Kitty terminal)"
+        fi
+        return "${rc}"
+    fi
+
+    if mountpoint -q "${MACOS_MNT}" 2>/dev/null; then
+        log_info "macOS APFS partition is already mounted Read-Only at ${MACOS_MNT}"
+        notify_osd "Already mounted (Read-Only Safe Mode): ${MACOS_MNT}"
+        return 0
+    fi
+
+    local apfs_dev=""
+    if ! apfs_dev="$(detect_apfs_partition)"; then
+        log_err "No Apple APFS partition detected on NVMe storage."
+        notify_osd "No Apple APFS partition detected"
+        return 1
+    fi
+
+    local apfs_vol=""
+    apfs_vol="$(detect_apfs_volume_id "${apfs_dev}" || true)"
+
+    mkdir -p "${MACOS_MNT}"
+    chown "${TARGET_UID}:${TARGET_GID}" "/run/media/${TARGET_USER}" 2>/dev/null || true
+
+    # Enforce strict Read-Only Safe Mode (-o ro) via apfs-fuse or fsapfsmount
+    local mounted_ok=0
+    if command -v apfs-fuse >/dev/null 2>&1; then
+        local -a fuse_args=()
+        if [[ -n "${apfs_vol}" && "${apfs_vol}" =~ ^[0-9]+$ ]]; then
+            fuse_args+=(-v "${apfs_vol}")
+        fi
+        if apfs-fuse "${fuse_args[@]}" -o "ro,allow_other,uid=${TARGET_UID},gid=${TARGET_GID}" "${apfs_dev}" "${MACOS_MNT}" 2>/dev/null; then
+            mounted_ok=1
+        elif [[ ${#fuse_args[@]} -gt 0 ]] && apfs-fuse -o "ro,allow_other,uid=${TARGET_UID},gid=${TARGET_GID}" "${apfs_dev}" "${MACOS_MNT}" 2>/dev/null; then
+            mounted_ok=1
+        fi
+    elif command -v fsapfsmount >/dev/null 2>&1; then
+        if fsapfsmount -X allow_other "${apfs_dev}" "${MACOS_MNT}" 2>/dev/null; then
+            mounted_ok=1
+        fi
+    else
+        if mount -t apfs -o "ro,uid=${TARGET_UID},gid=${TARGET_GID}" "${apfs_dev}" "${MACOS_MNT}" 2>/dev/null; then
+            mounted_ok=1
+        fi
+    fi
+
+    if [[ "${mounted_ok}" -ne 1 ]]; then
+        log_err "Failed to mount ${apfs_dev} Read-Only at ${MACOS_MNT} (if FileVault is active, run 'sudo apfs-fuse ${apfs_dev} ${MACOS_MNT}' in terminal)."
+        notify_osd "Mount failed (if FileVault encrypted, unlock in Kitty terminal)"
+        return 1
+    fi
+
+    if [[ -d "${TARGET_HOME}" ]]; then
+        ln -sfn "${MACOS_MNT}" "${TARGET_HOME}/macOS-Drive" 2>/dev/null || true
+        chown -h "${TARGET_UID}:${TARGET_GID}" "${TARGET_HOME}/macOS-Drive" 2>/dev/null || true
+    fi
+
+    log_info "Mounted ${apfs_dev} (vol ${apfs_vol:-0}) at ${MACOS_MNT} in strict Read-Only Safe Mode."
+    notify_osd "Mounted macOS APFS (Read-Only Safe Mode) at ${MACOS_MNT}"
+}
+
+umount_macos() {
+    if [[ "${SIMULATE}" == "1" ]]; then
+        rm -f "${MACOS_MNT}/.bridge-ro-state"
+        log_info "Simulated unmount of ${MACOS_MNT}"
+        return 0
+    fi
+
+    if [[ "${EUID}" -ne 0 ]]; then
+        run_self_elevated --no-gui umount
+        local rc=$?
+        if [[ "${rc}" -eq 0 ]]; then
+            notify_osd "Safely unmounted macOS APFS partition"
+        fi
+        return "${rc}"
+    fi
+
+    if ! mountpoint -q "${MACOS_MNT}" 2>/dev/null; then
+        log_info "macOS APFS is not currently mounted."
+        notify_osd "macOS APFS is already unmounted"
+        return 0
+    fi
+
+    if command -v fusermount3 >/dev/null 2>&1; then
+        fusermount3 -u "${MACOS_MNT}" 2>/dev/null || umount "${MACOS_MNT}"
+    else
+        umount "${MACOS_MNT}"
+    fi
+
+    log_info "Unmounted ${MACOS_MNT} cleanly."
+    notify_osd "Safely unmounted macOS APFS partition"
+}
+
+setup_shared_exchange() {
+    local shared_dir="${TARGET_HOME}/macOS-Shared"
+    mkdir -p "${shared_dir}"
+    chown "${TARGET_UID}:${TARGET_GID}" "${shared_dir}" 2>/dev/null || true
+
+    # Check if a dedicated shared exchange partition labeled SILICY_SHARE or MACOS_SHARE exists
+    local share_dev=""
+    share_dev="$(blkid -L "SILICY_SHARE" 2>/dev/null || blkid -L "MACOS_SHARE" 2>/dev/null || true)"
+
+    if [[ -n "${share_dev}" && -b "${share_dev}" ]]; then
+        if [[ "${SIMULATE}" != "1" && "${EUID}" -ne 0 ]]; then
+            run_self_elevated --no-gui shared || true
+        else
+            mkdir -p "${SHARED_MNT}"
+            chown "${TARGET_UID}:${TARGET_GID}" "/run/media/${TARGET_USER}" 2>/dev/null || true
+            if ! mountpoint -q "${SHARED_MNT}" 2>/dev/null; then
+                local share_fs="" share_fs_lc=""
+                local mount_opts="rw,noatime"
+                share_fs="$(blkid -o value -s TYPE "${share_dev}" 2>/dev/null || true)"
+                share_fs_lc="$(printf "%s" "${share_fs}" | tr '[:upper:]' '[:lower:]')"
+                case "${share_fs_lc}" in
+                    vfat|msdos|exfat|ntfs|ntfs3)
+                        mount_opts="rw,noatime,uid=${TARGET_UID},gid=${TARGET_GID}"
+                        ;;
+                esac
+                mount -o "${mount_opts}" "${share_dev}" "${SHARED_MNT}" 2>/dev/null || true
+                case "${share_fs_lc}" in
+                    ext4|ext3|ext2|btrfs|xfs|f2fs)
+                        chown "${TARGET_UID}:${TARGET_GID}" "${SHARED_MNT}" 2>/dev/null || true
+                        ;;
+                esac
+            fi
+            ln -sfn "${SHARED_MNT}" "${shared_dir}/Shared-Partition" 2>/dev/null || true
+            chown -h "${TARGET_UID}:${TARGET_GID}" "${shared_dir}/Shared-Partition" 2>/dev/null || true
+            log_info "Shared exchange partition (${share_dev}) mounted at ${SHARED_MNT}"
+        fi
+        notify_osd "Shared partition mounted at ${SHARED_MNT}"
+    else
+        cat <<'EOF' > "${shared_dir}/README-MACOS-BRIDGE.txt"
+silicyOS <-> macOS Safe Data Exchange Guide
+===========================================
+1. Read-Only macOS Access:
+   Run 'silicy-macos-bridge mount' (or click [macOS Shared Drive] in silicy-center)
+   to mount your macOS APFS partition in strict Read-Only Safe Mode at:
+   /run/media/$USER/macOS
+
+2. Bidirectional Shared Partition (Optional):
+   Format an exFAT partition labeled 'SILICY_SHARE' in macOS Disk Utility or Linux,
+   and silicy-macos-bridge will automatically mount it at /run/media/$USER/Shared.
+EOF
+        chown "${TARGET_UID}:${TARGET_GID}" "${shared_dir}/README-MACOS-BRIDGE.txt" 2>/dev/null || true
+        log_info "Prepared shared exchange directory at ${shared_dir}"
+        notify_osd "Opened exchange folder: ${shared_dir}"
+    fi
+
+    if [[ "${NO_GUI}" -eq 0 && "${EUID}" -ne 0 ]] && command -v kitty >/dev/null 2>&1 && [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        nohup kitty --working-directory "${shared_dir}" >/dev/null 2>&1 &
+    fi
+}
+
+open_macos_bridge() {
+    if mount_macos_ro; then
+        if [[ "${NO_GUI}" -eq 0 && "${EUID}" -ne 0 ]] && command -v kitty >/dev/null 2>&1 && [[ -n "${WAYLAND_DISPLAY:-}" ]] && [[ -d "${MACOS_MNT}" ]]; then
+            nohup kitty --working-directory "${MACOS_MNT}" >/dev/null 2>&1 &
+        fi
+    fi
+}
+
+status_bridge() {
+    if [[ "${SIMULATE}" == "1" && -f "${MACOS_MNT}/.bridge-ro-state" ]]; then
+        log_info "Status: MOUNTED (Read-Only Safe Mode) at ${MACOS_MNT}"
+        return 0
+    fi
+    if mountpoint -q "${MACOS_MNT}" 2>/dev/null; then
+        log_info "Status: MOUNTED (Read-Only Safe Mode) at ${MACOS_MNT}"
+    else
+        log_info "Status: UNMOUNTED (${MACOS_MNT})"
+    fi
+}
+
+usage() {
+    cat <<'EOF'
+silicy-macos-bridge - Safe Read-Only macOS APFS & Shared Exchange Mounter
+Usage:
+  silicy-macos-bridge [--no-gui] [--vol N] mount   Mount macOS APFS in Read-Only Safe Mode at /run/media/$USER/macOS
+  silicy-macos-bridge [--no-gui] [--vol N] open    Mount Read-Only APFS and open in Terminal/File Manager
+  silicy-macos-bridge [--no-gui] shared            Mount/prepare shared exchange folder (~/macOS-Shared)
+  silicy-macos-bridge [--no-gui] umount            Safely unmount macOS APFS partition
+  silicy-macos-bridge status                       Show current mount state
+EOF
+}
+
+main() {
+    local subcmd="status"
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --no-gui)
+                NO_GUI=1
+                shift
+                ;;
+            --vol)
+                if [[ $# -lt 2 || ! "$2" =~ ^[0-9]+$ ]]; then
+                    log_err "--vol requires a numeric APFS volume index"
+                    exit 1
+                fi
+                SILICY_APFS_VOL_ID="$2"
+                shift 2
+                ;;
+            *)
+                subcmd="$1"
+                shift
+                ;;
+        esac
+    done
+
+    case "${subcmd}" in
+        mount)
+            mount_macos_ro
+            ;;
+        open)
+            open_macos_bridge
+            ;;
+        shared)
+            setup_shared_exchange
+            ;;
+        umount|unmount)
+            umount_macos
+            ;;
+        status)
+            status_bridge
+            ;;
+        --help|-h|help)
+            usage
+            ;;
+        *)
+            usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

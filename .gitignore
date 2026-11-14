@@ -1,0 +1,24 @@
+# Build artifacts & large disk/installer images (distribute via GitHub Releases)
+silicyos-build/silicyos-apple-silicon.zip
+*.img
+*.img.zst
+*.iso
+*.zip
+*.tar.gz
+*.tar.zst
+
+# Compiled binaries & temporary build directories
+silicyos-build/silicy-ctl/silicy-ctl
+silicyos-build/silicy-ctl/*.o
+silicyos-build/work/
+silicyos-build/out/
+silicyos-build/stage/
+silicyos-build/pkg/
+silicyos-build/src/
+
+# OS & editor metadata
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~

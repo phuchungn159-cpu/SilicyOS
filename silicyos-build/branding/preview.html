@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>SilicyOS — Branding preview</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 28px; background: #0e1015; color: #e8eaf0; }
+  h1 { color: #8ab4ff; font-size: 22px; }
+  h2 { color: #8ab4ff; margin: 30px 0 10px; font-size: 17px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+  .box { background: #16181e; border: 1px solid #2a2e3a; border-radius: 14px; padding: 18px;
+         display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .box.light { background: #f4f4f6; border-color: #d8d8de; }
+  .box img, .box svg { max-width: 100%; max-height: 260px; }
+  .cap { font-size: 12px; color: #9aa3b5; text-align: center; }
+  pre { background: #0a0c10; color: #d8dee9; padding: 14px; border-radius: 10px;
+        font-size: 11px; line-height: 1.25; overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<h1>SilicyOS — Branding (logo vẽ tay · làm nét 4x &amp; vector hóa SVG)</h1>
+
+<h2>Icon &amp; logo chính (Master Sharpened + Vector SVG)</h2>
+<div class="grid">
+  <div class="box"><img src="silicyos-logo.svg" alt="vector svg"><div class="cap">silicyos-logo.svg · Vector 3D Chrome</div></div>
+  <div class="box light"><img src="mark-128.png" alt="mark 128"><div class="cap">mark-128 · nền sáng</div></div>
+  <div class="box"><img src="mark-256.png" alt="mark 256"><div class="cap">mark-256 · nền tối</div></div>
+  <div class="box light"><img src="silicyos-logo.png" alt="logo"><div class="cap">silicyos-logo · nền sáng</div></div>
+  <div class="box"><img src="silicyos-logo.png" alt="logo dark"><div class="cap">silicyos-logo · nền tối</div></div>
+</div>
+
+<h2>Boot / Plymouth (Vector SVG &amp; Boot Splash)</h2>
+<div class="grid">
+  <div class="box"><svg width="240" height="240"><image href="silicyos-logo-mono.svg" width="240" height="240"/></svg><div class="cap">silicyos-logo-mono.svg</div></div>
+  <div class="box"><img src="silicyos-boot.png" alt="boot"><div class="cap">silicyos-boot.png (320px)</div></div>
+  <div class="box"><img src="mark-64.png" alt="icon 64"><div class="cap">mark-64 · icon nhỏ</div></div>
+</div>
+
+<h2>fastfetch — ASCII art (64 cột)</h2>
+<pre id="ascii">đang tải…</pre>
+
+<h2>Wallpaper 1920×1080</h2>
+<div class="box"><img src="silicyos-wallpaper.png" alt="wallpaper" style="max-height:320px"><div class="cap">silicyos-wallpaper.png</div></div>
+
+<script>
+fetch('silicyos-ascii.txt').then(r => r.text()).then(t => {
+  document.getElementById('ascii').textContent = t;
+}).catch(() => { document.getElementById('ascii').textContent = '(không đọc được silicyos-ascii.txt)'; });
+</script>
+</body>
+</html>

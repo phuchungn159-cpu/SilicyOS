@@ -1,0 +1,112 @@
+# ==============================================================================
+# silicyOS Minimal Package Manifest (aarch64 - Apple Silicon M1/M2/M3)
+# Target Footprint: < 2.8GB Disk | < 420MB Idle RAM
+# ==============================================================================
+
+# --- Core Base System (ARM64) ---
+base
+archlinuxarm-keyring
+asahi-alarm-keyring
+pacman
+glibc
+linux-api-headers
+systemd
+systemd-sysvcompat
+dbus-broker
+dbus-broker-units
+coreutils
+util-linux
+findutils
+grep
+sed
+gawk
+procps-ng
+psmisc
+shadow
+sudo
+less
+zstd
+xz
+gzip
+tar
+ca-certificates
+ca-certificates-utils
+openssl
+iproute2
+iputils
+pciutils
+usbutils
+kbd
+filesystem
+zsh
+mkinitcpio
+pacman-contrib
+clang
+lld
+
+# --- Storage, Btrfs Engine & macOS APFS Safe Bridge ---
+btrfs-progs
+compsize
+dosfstools
+fuse3
+apfs-fuse
+
+# --- Asahi Apple Silicon Hardware Support ---
+asahi-meta
+asahi-fwextract
+asahi-scripts
+m1n1
+uboot-asahi
+mesa-asahi-edge
+asahi-audio
+speakersafetyd
+tiny-dfr
+alsa-ucm-conf-asahi
+bankstown-lv2
+lsp-plugins-lv2
+
+# --- Audio Subsystem ---
+pipewire
+pipewire-alsa
+pipewire-pulse
+pipewire-jack
+wireplumber
+
+# --- Wireless & Networking ---
+iwd
+openresolv
+wireless-regdb
+
+# --- Memory, Swap & CachyOS-style Daemons ---
+zram-generator
+earlyoom
+ananicy-cpp
+
+# --- Wayland Compositors, Keyd Remapper, SwayOSD HUD & Seat Management ---
+niri
+hyprland
+seatd
+xdg-desktop-portal-wlr
+xdg-desktop-portal-hyprland
+wl-clipboard
+grim
+slurp
+brightnessctl
+keyd
+python
+jq
+swayosd
+wlsunset
+libnotify
+
+# --- Ultra-Light Desktop UI, Bar, Launcher, Terminal & Login ---
+waybar
+fuzzel
+kitty
+fastfetch
+greetd
+greetd-tuigreet
+
+# --- Minimal Fonts (Vector + Icons) ---
+ttf-jetbrains-mono-nerd
+noto-fonts

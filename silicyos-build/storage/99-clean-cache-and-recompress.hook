@@ -1,0 +1,14 @@
+# /etc/pacman.d/hooks/99-clean-cache-and-recompress.hook
+# silicyOS Zero-Bloat Post-Transaction Hook
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = Purging Pacman package archives (.pkg.tar.zst) and temporary directories...
+When = PostTransaction
+Exec = /usr/bin/sh -c 'rm -rf /var/cache/pacman/pkg/*.pkg.tar* /var/cache/pacman/pkg/download-* /tmp/* /tmp/.[!.]* /tmp/..?* /var/tmp/* /var/tmp/.[!.]* /var/tmp/..?* 2>/dev/null || true'

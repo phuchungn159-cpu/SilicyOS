@@ -1,0 +1,22 @@
+# ==============================================================================
+# /etc/systemd/system/silicy-pe-enforcer.service
+# Systemd Service for Apple Silicon P-Core / E-Core Cpuset & Taskset Enforcement
+# ==============================================================================
+
+[Unit]
+Description=silicyOS Apple Silicon P-Core/E-Core Topology & Affinity Enforcer
+After=multi-user.target ananicy-cpp.service
+Wants=ananicy-cpp.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/silicy-pe-enforcer.sh
+Restart=always
+RestartSec=2
+CPUSchedulingPolicy=batch
+Nice=10
+MemoryMax=8M
+OOMScoreAdjust=-500
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "logo": {
+    "type": "file",
+    "source": "~/.config/fastfetch/silicyos-ascii.txt",
+    "color": {
+      "1": "38;2;242;242;247"
+    },
+    "padding": {
+      "top": 1,
+      "left": 2,
+      "right": 3
+    }
+  },
+  "display": {
+    "separator": "  ➜  ",
+    "color": {
+      "keys": "38;2;10;132;255",
+      "title": "38;2;242;242;247"
+    }
+  },
+  "modules": [
+    "title",
+    {
+      "type": "custom",
+      "format": "────────────────────────────────────────────────────────"
+    },
+    {
+      "type": "host",
+      "key": "󰀵 Host   ",
+      "format": "{2} (Apple Silicon Mac)"
+    },
+    {
+      "type": "kernel",
+      "key": "󰻠 Kernel ",
+      "format": "{2} (linux-silicy-asahi BORE+LTO 16K)"
+    },
+    {
+      "type": "packages",
+      "key": "󰏖 Pkgs   "
+    },
+    {
+      "type": "wm",
+      "key": "󱂬 WM     ",
+      "format": "{2} ({3})"
+    },
+    {
+      "type": "memory",
+      "key": "󰍛 Memory ",
+      "format": "{1} / {2} ({3})"
+    },
+    {
+      "type": "disk",
+      "key": "󰋊 Disk   ",
+      "folders": "/",
+      "format": "{1} / {2} ({3}) - Btrfs zstd:3"
+    },
+    {
+      "type": "custom",
+      "format": "────────────────────────────────────────────────────────"
+    },
+    {
+      "type": "colors",
+      "symbol": "circle"
+    }
+  ]
+}

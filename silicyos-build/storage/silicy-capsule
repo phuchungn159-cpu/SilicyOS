@@ -1,0 +1,326 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# /usr/local/bin/silicy-capsule
+# silicyOS Zero-Space Btrfs Atomic Snapshot & 2-Second Rollback Engine
+# Subvolume Layout: @ (root), @home, @pkg, @log, @snapshots (/.snapshots)
+# Policy: Retain maximum 3 snapshots; auto-prune oldest on every creation.
+# ==============================================================================
+set -euo pipefail
+
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+SNAP_DIR="${SILICY_SNAPSHOT_DIR:-/.snapshots}"
+MAX_SNAPSHOTS="${SILICY_MAX_SNAPSHOTS:-3}"
+SIMULATE="${SILICY_CAPSULE_SIMULATE:-0}"
+
+log_info() {
+    printf "[silicy-capsule] %s\n" "$1"
+}
+
+log_err() {
+    printf "[silicy-capsule] ERROR: %s\n" "$1" >&2
+}
+
+notify_osd() {
+    local msg="$1"
+    if command -v swayosd-client >/dev/null 2>&1 && [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        swayosd-client --custom-icon "drive-harddisk-symbolic" --custom-message "System Capsule: ${msg}" >/dev/null 2>&1 || true
+    fi
+    if command -v notify-send >/dev/null 2>&1 && [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+        notify-send -a "silicyOS System Capsule" -i "drive-harddisk-symbolic" "System Capsule" "${msg}" >/dev/null 2>&1 &
+    fi
+}
+
+require_root() {
+    if [[ "${SIMULATE}" != "1" && "${EUID}" -ne 0 ]]; then
+        log_err "Root privileges are required for Btrfs subvolume operations."
+        exit 1
+    fi
+}
+
+delete_one_snapshot() {
+    local snap_path="$1"
+    if [[ "${SIMULATE}" == "1" ]]; then
+        rm -rf "${snap_path}"
+    else
+        btrfs property set -ts "${snap_path}" ro false 2>/dev/null || true
+        btrfs subvolume delete "${snap_path}" >/dev/null
+    fi
+    log_info "Pruned expired snapshot: ${snap_path##*/}"
+}
+
+prune_snapshots() {
+    mkdir -p "${SNAP_DIR}"
+    local snaps=()
+    while IFS= read -r entry; do
+        [[ -n "${entry}" ]] && snaps+=("${entry}")
+    done < <(find "${SNAP_DIR}" -mindepth 1 -maxdepth 1 -type d -name "silicy-*" 2>/dev/null | sort)
+
+    local total="${#snaps[@]}"
+    if (( total <= MAX_SNAPSHOTS )); then
+        return 0
+    fi
+
+    local remove_count=$(( total - MAX_SNAPSHOTS ))
+    local i
+    for (( i = 0; i < remove_count; i++ )); do
+        delete_one_snapshot "${snaps[$i]}"
+    done
+}
+
+create_snapshot() {
+    require_root
+    local raw_label="${1:-manual}"
+    local clean_label
+    clean_label="$(printf "%s" "${raw_label}" | tr -cs 'a-zA-Z0-9_-' '-' | sed 's/^-//;s/-$//')"
+    [[ -z "${clean_label}" ]] && clean_label="snapshot"
+
+    mkdir -p "${SNAP_DIR}"
+    local ts
+    ts="$(date +%Y%m%d-%H%M%S)"
+    local snap_name="silicy-${ts}-${clean_label}"
+    local snap_path="${SNAP_DIR}/${snap_name}"
+
+    local seq=1
+    while [[ -e "${snap_path}" ]]; do
+        snap_name="silicy-${ts}-${seq}-${clean_label}"
+        snap_path="${SNAP_DIR}/${snap_name}"
+        seq=$(( seq + 1 ))
+    done
+
+    if [[ "${SIMULATE}" == "1" ]]; then
+        mkdir -p "${snap_path}"
+        printf "SNAPSHOT=%s\nCREATED_AT=%s\nREADONLY=true\nSUBVOL=@\n" "${snap_name}" "${ts}" > "${snap_path}/.capsule-meta"
+    else
+        btrfs subvolume snapshot -r / "${snap_path}" >/dev/null
+    fi
+
+    log_info "Created read-only zero-space snapshot: ${snap_path}"
+    prune_snapshots
+    notify_osd "Created snapshot ${snap_name} (retained max ${MAX_SNAPSHOTS})"
+}
+
+list_snapshots() {
+    mkdir -p "${SNAP_DIR}"
+    local snaps=()
+    while IFS= read -r entry; do
+        [[ -n "${entry}" ]] && snaps+=("${entry}")
+    done < <(find "${SNAP_DIR}" -mindepth 1 -maxdepth 1 -type d -name "silicy-*" 2>/dev/null | sort -r)
+
+    if (( ${#snaps[@]} == 0 )); then
+        log_info "No snapshots found in ${SNAP_DIR}."
+        return 0
+    fi
+
+    printf "%-40s  %-20s\n" "SNAPSHOT NAME" "LOCATION"
+    printf "%-40s  %-20s\n" "----------------------------------------" "--------------------"
+    local s
+    for s in "${snaps[@]}"; do
+        printf "%-40s  %-20s\n" "${s##*/}" "${s}"
+    done
+}
+
+choose_snapshot_interactive() {
+    local snaps=()
+    while IFS= read -r entry; do
+        [[ -n "${entry}" ]] && snaps+=("${entry##*/}")
+    done < <(find "${SNAP_DIR}" -mindepth 1 -maxdepth 1 -type d -name "silicy-*" 2>/dev/null | sort -r)
+
+    if (( ${#snaps[@]} == 0 )); then
+        log_err "No snapshots available in ${SNAP_DIR} to rollback."
+        exit 1
+    fi
+
+    if command -v fuzzel >/dev/null 2>&1 && [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        printf "%s\n" "${snaps[@]}" | fuzzel --dmenu \
+            --prompt="Rollback Snapshot  " \
+            --lines=6 \
+            --width=56 \
+            --background-color="141418f0" \
+            --text-color="f2f2f7ff" \
+            --prompt-color="0a84ffff" \
+            --selection-color="26262eff" \
+            --selection-text-color="f2f2f7ff" \
+            --selection-match-color="0a84ffff" \
+            --border-color="26262eff" \
+            --border-width=2 \
+            --border-radius=14
+    elif command -v gum >/dev/null 2>&1; then
+        gum choose --header "Select silicyOS Btrfs Snapshot to Restore (@):" "${snaps[@]}"
+    elif command -v whiptail >/dev/null 2>&1; then
+        local items=()
+        local s
+        for s in "${snaps[@]}"; do
+            items+=("${s}" "Read-Only Btrfs Capsule")
+        done
+        whiptail --title "silicyOS System Capsule Rollback" --menu "Select a snapshot to restore subvolume @:" 15 72 6 "${items[@]}" 3>&1 1>&2 2>&3
+    elif command -v dialog >/dev/null 2>&1; then
+        local items=()
+        local s
+        for s in "${snaps[@]}"; do
+            items+=("${s}" "Read-Only Btrfs Capsule")
+        done
+        dialog --stdout --title "silicyOS System Capsule Rollback" --menu "Select a snapshot to restore subvolume @:" 15 72 6 "${items[@]}"
+    else
+        printf "Select a snapshot to restore:\n" >&2
+        local opt
+        select opt in "${snaps[@]}"; do
+            if [[ -n "${opt:-}" ]]; then
+                printf "%s\n" "${opt}"
+                break
+            fi
+        done
+    fi
+}
+
+rollback_snapshot() {
+    require_root
+    local target_name="${1:-}"
+    if [[ -z "${target_name}" ]]; then
+        target_name="$(choose_snapshot_interactive)"
+    fi
+    [[ -z "${target_name}" ]] && exit 0
+
+    local target_path="${SNAP_DIR}/${target_name}"
+    if [[ ! -d "${target_path}" ]]; then
+        log_err "Snapshot '${target_name}' does not exist at ${target_path}."
+        exit 1
+    fi
+
+    local top_mnt="${SILICY_TOP_MNT:-/run/silicy-btrfs-top}"
+    if [[ "${SIMULATE}" == "1" && -z "${SILICY_TOP_MNT:-}" ]]; then
+        printf "%s\n" "${target_name}" > "${SNAP_DIR}/.last-rollback"
+        log_info "Simulated instant rollback of subvolume @ to '${target_name}'."
+        return 0
+    fi
+
+    if [[ "${SIMULATE}" != "1" ]]; then
+        local root_dev
+        root_dev="$(findmnt -no SOURCE / | sed 's/\[.*\]//')"
+        if [[ -z "${root_dev}" || ! -b "${root_dev}" ]]; then
+            log_err "Unable to resolve Btrfs root block device for '/'."
+            exit 1
+        fi
+
+        mkdir -p "${top_mnt}"
+        mount -t btrfs -o subvolid=5 "${root_dev}" "${top_mnt}"
+        trap 'umount "${top_mnt}" 2>/dev/null || true' EXIT
+    else
+        mkdir -p "${top_mnt}"
+    fi
+
+    local ts
+    ts="$(date +%Y%m%d-%H%M%S)"
+    local backup_subvol="${top_mnt}/@_rollback_prev_${ts}"
+    local seq=1
+    while [[ -e "${backup_subvol}" ]]; do
+        backup_subvol="${top_mnt}/@_rollback_prev_${ts}_${seq}"
+        seq=$(( seq + 1 ))
+    done
+
+    # Remove any older unmounted @_rollback_prev_* subvolumes so disk space is never leaked
+    local old_prev
+    for old_prev in "${top_mnt}"/@_rollback_prev_*; do
+        if [[ -d "${old_prev}" ]]; then
+            if [[ "${SIMULATE}" == "1" ]]; then
+                rm -rf "${old_prev}" 2>/dev/null || true
+            else
+                btrfs property set -ts "${old_prev}" ro false 2>/dev/null || true
+                btrfs subvolume delete "${old_prev}" >/dev/null 2>&1 || true
+            fi
+        fi
+    done
+
+    local src_snap=""
+    if [[ -d "${top_mnt}/@snapshots/${target_name}" ]]; then
+        src_snap="${top_mnt}/@snapshots/${target_name}"
+    elif [[ -d "${top_mnt}/@/.snapshots/${target_name}" ]]; then
+        src_snap="${top_mnt}/@/.snapshots/${target_name}"
+    elif [[ -d "${target_path}" ]]; then
+        src_snap="${target_path}"
+    else
+        log_err "Could not locate snapshot '${target_name}' on top-level Btrfs volume."
+        exit 1
+    fi
+
+    if [[ -d "${top_mnt}/@" ]]; then
+        mv "${top_mnt}/@" "${backup_subvol}"
+    fi
+
+    if [[ "${SIMULATE}" == "1" ]]; then
+        if ! cp -a "${src_snap}" "${top_mnt}/@"; then
+            [[ -d "${backup_subvol}" ]] && mv "${backup_subvol}" "${top_mnt}/@"
+            log_err "Failed to restore simulated snapshot '${target_name}'; restored previous @."
+            exit 1
+        fi
+    else
+        if ! btrfs subvolume snapshot "${src_snap}" "${top_mnt}/@" >/dev/null; then
+            [[ -d "${backup_subvol}" ]] && mv "${backup_subvol}" "${top_mnt}/@"
+            log_err "Failed to create writable @ snapshot from '${target_name}'; restored previous @."
+            exit 1
+        fi
+        btrfs property set -ts "${top_mnt}/@" ro false 2>/dev/null || true
+    fi
+
+    # Ensure all fstab nested mountpoint directories exist inside restored @
+    mkdir -p \
+        "${top_mnt}/@/home" \
+        "${top_mnt}/@/boot/efi" \
+        "${top_mnt}/@/var/cache/pacman/pkg" \
+        "${top_mnt}/@/var/log" \
+        "${top_mnt}/@/.snapshots" \
+        "${top_mnt}/@/tmp"
+
+    if [[ "${SIMULATE}" == "1" ]]; then
+        printf "%s\n" "${target_name}" > "${SNAP_DIR}/.last-rollback"
+    else
+        sync
+        umount "${top_mnt}"
+        trap - EXIT
+    fi
+
+    log_info "Subvolume @ successfully restored from '${target_name}'."
+    notify_osd "Restored @ to ${target_name}. Reboot to activate."
+}
+
+usage() {
+    cat <<'EOF'
+silicy-capsule - Btrfs Zero-Space Atomic Snapshot & Rollback Utility
+Usage:
+  silicy-capsule create [label]      Create instant read-only snapshot in /.snapshots/
+  silicy-capsule auto-pre-upgrade    Pacman pre-transaction hook entrypoint (retains 3)
+  silicy-capsule list                List available system snapshots
+  silicy-capsule prune               Delete oldest snapshots, keeping at most 3
+  silicy-capsule rollback [name]     Interactive 2-second rollback of @ root subvolume
+EOF
+}
+
+main() {
+    case "${1:-}" in
+        create)
+            create_snapshot "${2:-manual}"
+            ;;
+        auto-pre-upgrade)
+            create_snapshot "pre-pacman"
+            ;;
+        list|ls)
+            list_snapshots
+            ;;
+        prune)
+            require_root
+            prune_snapshots
+            ;;
+        rollback|restore)
+            rollback_snapshot "${2:-}"
+            ;;
+        --help|-h|help)
+            usage
+            ;;
+        *)
+            usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

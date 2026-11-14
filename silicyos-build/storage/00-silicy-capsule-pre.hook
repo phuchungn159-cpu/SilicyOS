@@ -1,0 +1,12 @@
+# /etc/pacman.d/hooks/00-silicy-capsule-pre.hook
+# silicyOS Pre-Transaction Btrfs Zero-Space Snapshot Hook (Retains Max 3)
+
+[Trigger]
+Operation = Upgrade
+Type = Package
+Target = *
+
+[Action]
+Description = Creating Btrfs zero-space read-only system snapshot in /.snapshots (max 3 retained)...
+When = PreTransaction
+Exec = /usr/local/bin/silicy-capsule auto-pre-upgrade

@@ -1,0 +1,9 @@
+# ==============================================================================
+# /etc/ananicy.d/00-cgroups.cgroups
+# silicyOS Cgroup v2 CPUWeight & Quota Definitions for P-core / E-core Tiering
+# ==============================================================================
+
+{ "cgroup": "pcores_rt",          "CPUQuota": 100 }
+{ "cgroup": "pcores_interactive", "CPUQuota": 95 }
+{ "cgroup": "ecores_background",  "CPUQuota": 40 }
+{ "cgroup": "ecores_idle",        "CPUQuota": 20 }

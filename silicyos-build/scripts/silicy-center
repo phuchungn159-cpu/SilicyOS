@@ -1,0 +1,677 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# /usr/local/bin/silicy-center
+# silicyOS Interactive Quick Control Center & Shortcut Guide
+# Palette: Apple Industrial Titanium (#0B0B0E, #141418, #26262E, #F2F2F7, #8E8E93, #0A84FF)
+# Shortcut: Super + Control + Space | Waybar Logo Click | Super + / (Shortcuts)
+# ==============================================================================
+set -euo pipefail
+
+if [[ -n "${SILICY_SYSROOT:-}" ]]; then
+    export PATH="${PATH}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+else
+    export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+fi
+
+# --- Apple Industrial Titanium Fuzzel Dmenu Wrapper ---
+fuzzel_titanium() {
+    local prompt_str="${1:-silicyOS  }"
+    local lines_cnt="${2:-8}"
+    local width_ch="${3:-58}"
+
+    if command -v fuzzel >/dev/null 2>&1 && [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        fuzzel --dmenu \
+            --prompt="${prompt_str}" \
+            --lines="${lines_cnt}" \
+            --width="${width_ch}" \
+            --background-color="141418f0" \
+            --text-color="f2f2f7ff" \
+            --prompt-color="0a84ffff" \
+            --placeholder-color="8e8e93ff" \
+            --input-color="f2f2f7ff" \
+            --match-color="0a84ffff" \
+            --selection-color="26262eff" \
+            --selection-text-color="f2f2f7ff" \
+            --selection-match-color="0a84ffff" \
+            --border-color="26262eff" \
+            --border-width=2 \
+            --border-radius=14
+    else
+        # Pure TTY fallback when invoked outside a live Wayland session
+        local item
+        while IFS= read -r item; do
+            printf "  %s\n" "${item}" >&2
+        done
+        return 0
+    fi
+}
+
+osd_notify() {
+    local title="$1"
+    local body="$2"
+    local icon="${3:-preferences-system-symbolic}"
+
+    if command -v swayosd-client >/dev/null 2>&1 && [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        swayosd-client --custom-icon "${icon}" --custom-message "${title}: ${body}" >/dev/null 2>&1 || true
+    fi
+    if command -v notify-send >/dev/null 2>&1 && [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+        notify-send -a "silicyOS Control Center" -i "${icon}" "${title}" "${body}" >/dev/null 2>&1 &
+    fi
+    printf "[silicy-center] %s: %s\n" "${title}" "${body}"
+}
+
+get_current_watts() {
+    if command -v silicy-ctl >/dev/null 2>&1; then
+        silicy-ctl telemetry --power 2>/dev/null | tr -d '\n' || printf "0.0W"
+    else
+        printf "0.0W"
+    fi
+}
+
+get_current_profile() {
+    if command -v silicy-ctl >/dev/null 2>&1; then
+        silicy-ctl power-profile status 2>/dev/null | tr -d '\n' || printf "balanced"
+    elif [[ -r /etc/silicy-power-profile ]]; then
+        head -n1 /etc/silicy-power-profile | tr -d '\n'
+    else
+        printf "balanced"
+    fi
+}
+
+get_battery_limit() {
+    if command -v silicy-ctl >/dev/null 2>&1; then
+        silicy-ctl battery-guard status 2>/dev/null | tr -d '\n' || printf "80"
+    elif [[ -r /etc/silicy-battery.conf ]]; then
+        head -n1 /etc/silicy-battery.conf | tr -d '\n'
+    else
+        printf "80"
+    fi
+}
+
+get_night_light_status() {
+    if pgrep -x wlsunset >/dev/null 2>&1; then
+        printf "ON (4200K)"
+    else
+        printf "OFF"
+    fi
+}
+
+get_refresh_rate_status() {
+    local rate_file="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/silicy-refresh-rate"
+    if [[ -r "${rate_file}" ]]; then
+        cat "${rate_file}" | tr -d '\n'
+    else
+        printf "120Hz ProMotion"
+    fi
+}
+
+get_keyboard_mode() {
+    if command -v silicy-ctl >/dev/null 2>&1; then
+        silicy-ctl keyboard-mode status 2>/dev/null | tr -d '\n' || printf "Mac (Command)"
+    elif [[ -r /etc/silicy-kb-mode ]]; then
+        head -n1 /etc/silicy-kb-mode | tr -d '\n'
+    elif [[ -r /run/silicy-kb-mode ]]; then
+        head -n1 /run/silicy-kb-mode | tr -d '\n'
+    else
+        printf "Mac (Command)"
+    fi
+}
+
+detect_edp_resolution() {
+    local target_out="${1:-}"
+    local sys_prefix="${SILICY_SYSROOT:-}"
+    local mode_file=""
+    local m
+    if [[ -n "${target_out}" ]]; then
+        for m in "${sys_prefix}"/sys/class/drm/card*-"${target_out}"/modes; do
+            if [[ -r "${m}" ]]; then
+                mode_file="${m}"
+                break
+            fi
+        done
+    fi
+    if [[ -z "${mode_file}" && ( -z "${target_out}" || "${target_out}" =~ ^(eDP|EDP|DSI|LVDS) ) ]]; then
+        for m in "${sys_prefix}"/sys/class/drm/card*-eDP-1/modes "${sys_prefix}"/sys/class/drm/card*-eDP-*/modes; do
+            if [[ -r "${m}" ]]; then
+                mode_file="${m}"
+                break
+            fi
+        done
+    fi
+    if [[ -n "${mode_file}" && -r "${mode_file}" ]]; then
+        local res
+        res="$(head -n1 "${mode_file}" 2>/dev/null | tr -d '[:space:]' || true)"
+        if [[ "${res}" =~ ^[0-9]+x[0-9]+$ ]]; then
+            printf "%s" "${res}"
+            return 0
+        fi
+    fi
+    printf "2560x1600"
+}
+
+get_macos_mount_status() {
+    local mnt="/run/media/${USER:-silicy}/macOS"
+    if mountpoint -q "${mnt}" 2>/dev/null; then
+        printf "Mounted RO (%s)" "${mnt}"
+    else
+        printf "Unmounted (Ready)"
+    fi
+}
+
+show_shortcut_guide() {
+    local guide_choice
+    guide_choice="$(cat <<'EOF' | fuzzel_titanium "Shortcut Guide  " 14 68
+[Command + Space]           Mo bang tim kiem ung dung nhanh (Fuzzel Spotlight)
+[Command + Control + Space] Mo Trung tam Dieu khien silicy-center
+[Command + /]               Mo bang tra cuu phim tat nay (Shortcut Guide)
+[Command + Return]          Mo cua so Terminal (Kitty GPU Wayland)
+[Command + Q]               Dong cua so hien tai
+[Command + C / V / X / Z]   Copy / Paste / Cut / Undo chuan macOS tren moi app
+[Ctrl + C trong Kitty]      Ngat tien trinh POSIX (SIGINT) trong Terminal
+[Command + Shift + 3]       Chup toan man hinh vao Clipboard
+[Command + Shift + 4]       Chup vung man hinh tuy chon vao Clipboard
+[Command + H / J / K / L]   Di chuyen tieu diem giua cac cua so
+[Command + 1 .. 6]          Chuyen doi khong gian lam viec (Workspace 1-6)
+[Command + F]               Phong to cot / Toan man hinh (Maximize)
+[Command + R]               Chuyen doi kich thuoc cot theo ty le vang
+[Command + Shift + E]       Dang xuat khoi phien Wayland
+EOF
+)" || true
+
+    if [[ -n "${guide_choice:-}" ]]; then
+        osd_notify "Shortcut Guide" "${guide_choice}" "input-keyboard-symbolic"
+    fi
+}
+
+apply_power_profile() {
+    local target_mode="$1"
+    if silicy-ctl power-profile "${target_mode}" >/dev/null 2>&1 || \
+       ([[ -z "${SILICY_SYSROOT:-}" ]] && sudo -n /usr/local/bin/silicy-ctl power-profile "${target_mode}" >/dev/null 2>&1); then
+        if [[ -z "${SILICY_SYSROOT:-}" && -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && command -v hyprctl >/dev/null 2>&1; then
+            local blur_val="true"
+            [[ "${target_mode}" == "eco" ]] && blur_val="false"
+            hyprctl keyword decoration:blur:enabled "${blur_val}" >/dev/null 2>&1 || true
+        fi
+        local mode_upper
+        mode_upper="$(printf "%s" "${target_mode}" | tr '[:lower:]' '[:upper:]')"
+        osd_notify "Power Profile" "Active: ${mode_upper} (Draw: $(get_current_watts))" "power-profile-balanced-symbolic"
+    else
+        osd_notify "Power Profile" "Failed to switch to ${target_mode}" "dialog-error-symbolic"
+        return 1
+    fi
+}
+
+menu_power_profile() {
+    if [[ -n "${1:-}" ]]; then
+        apply_power_profile "$1"
+        return $?
+    fi
+    local cur_prof cur_watts choice target_mode
+    cur_prof="$(get_current_profile)"
+    cur_watts="$(get_current_watts)"
+
+    choice="$(cat <<EOF | fuzzel_titanium "Power (${cur_prof} | ${cur_watts})  " 4 62
+1. Eco Mode        — Khoa xung P-Core, uu tien E-Core, tat Blur (Tiet kiem Pin)
+2. Balanced Mode   — Schedutil mac dinh, can bang 60Hz/120Hz & dien nang
+3. Burst Mode      — Mo toi da xung P-Core + CachyOS BORE Latency Boost
+EOF
+)" || return 0
+
+    case "${choice}" in
+        1.*) target_mode="eco" ;;
+        2.*) target_mode="balanced" ;;
+        3.*) target_mode="burst" ;;
+        *)   return 0 ;;
+    esac
+
+    apply_power_profile "${target_mode}"
+}
+
+apply_battery_care() {
+    local target_lim="$1"
+    if silicy-ctl battery-guard "${target_lim}" >/dev/null 2>&1 || \
+       ([[ -z "${SILICY_SYSROOT:-}" ]] && sudo -n /usr/local/bin/silicy-ctl battery-guard "${target_lim}" >/dev/null 2>&1); then
+        osd_notify "MacSMC Battery Guard" "Charge ceiling locked at ${target_lim}%" "battery-good-charging-symbolic"
+    else
+        osd_notify "MacSMC Battery Guard" "Failed to set charge ceiling (${target_lim}%)" "dialog-error-symbolic"
+        return 1
+    fi
+}
+
+menu_battery_care() {
+    if [[ -n "${1:-}" ]]; then
+        apply_battery_care "$1"
+        return $?
+    fi
+    local cur_lim choice target_lim
+    cur_lim="$(get_battery_limit)"
+
+    choice="$(cat <<EOF | fuzzel_titanium "Battery Care (Current: ${cur_lim}%)  " 4 62
+1. Enable 80% MacSMC Limiter   — Chuan bao ve pin MacBook hang ngay (Khuyen nghi)
+2. Ultra-Storage 60% Limiter   — Che do cam sac lien tuc tai ban lam viec
+3. Full Charge 100%            — Sac day 100% truoc khi di chuyen xa
+EOF
+)" || return 0
+
+    case "${choice}" in
+        1.*) target_lim="80" ;;
+        2.*) target_lim="60" ;;
+        3.*) target_lim="100" ;;
+        *)   return 0 ;;
+    esac
+
+    apply_battery_care "${target_lim}"
+}
+
+detect_niri_internal_output() {
+    local out="eDP-1"
+    if command -v niri >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+        local detected=""
+        detected="$(niri msg --json outputs 2>/dev/null | jq -r '
+            (to_entries | map(select(.key | test("^(eDP|EDP|DSI|LVDS)"; "i"))) | .[0].key)
+            // (keys | .[0])
+            // empty
+        ' 2>/dev/null || true)"
+        if [[ -n "${detected}" && "${detected}" != "null" ]]; then
+            out="${detected}"
+        fi
+    fi
+    printf "%s\n" "${out}"
+}
+
+detect_hyprland_internal_output() {
+    local out="eDP-1"
+    local monitors_json="${1-}"
+    if [[ $# -lt 1 ]] && command -v hyprctl >/dev/null 2>&1; then
+        monitors_json="$(hyprctl monitors -j 2>/dev/null || true)"
+    fi
+    if [[ -n "${monitors_json}" ]] && command -v jq >/dev/null 2>&1; then
+        local detected=""
+        detected="$(printf "%s" "${monitors_json}" | jq -r '
+            if type == "array" then
+                (map(select(((.name? // "") | length > 0) and ((.disabled // false) | not) and ((.name? // "") | test("^(eDP|DSI|LVDS)"; "i")))) | .[0].name)
+                // (map(select(((.name? // "") | length > 0) and ((.disabled // false) | not) and (.focused // false))) | .[0].name)
+                // (map(select(((.name? // "") | length > 0) and ((.disabled // false) | not))) | .[0].name)
+                // (map(select(((.name? // "") | length > 0) and ((.name? // "") | test("^(eDP|DSI|LVDS)"; "i")))) | .[0].name)
+                // (map(select(((.name? // "") | length > 0))) | .[0].name)
+                // empty
+            else
+                empty
+            end
+        ' 2>/dev/null || true)"
+        if [[ -n "${detected}" && "${detected}" != "null" ]]; then
+            out="${detected}"
+        fi
+    fi
+    printf "%s\n" "${out}"
+}
+
+detect_hyprland_output_resolution() {
+    local target_out="${1:-eDP-1}"
+    local monitors_json="${2-}"
+    if [[ $# -lt 2 ]] && command -v hyprctl >/dev/null 2>&1; then
+        monitors_json="$(hyprctl monitors -j 2>/dev/null || true)"
+    fi
+    if [[ -n "${monitors_json}" ]] && command -v jq >/dev/null 2>&1; then
+        local res=""
+        res="$(printf "%s" "${monitors_json}" | jq -r --arg out "${target_out}" '
+            if type == "array" then
+                (map(select((.name? // "") == $out)) | .[0]) as $m |
+                if ($m != null) and (($m.width? // 0) > 0) and (($m.height? // 0) > 0) then
+                    "\($m.width)x\($m.height)"
+                elif ($m != null) and (($m.availableModes? | type) == "array") and (($m.availableModes | length) > 0) then
+                    ($m.availableModes[0] | split("@")[0])
+                else
+                    empty
+                end
+            else
+                empty
+            end
+        ' 2>/dev/null || true)"
+        if [[ "${res}" =~ ^[0-9]+x[0-9]+$ ]]; then
+            printf "%s" "${res}"
+            return 0
+        fi
+    fi
+    detect_edp_resolution "${target_out}"
+}
+
+detect_hyprland_output_scale() {
+    local target_out="${1:-eDP-1}"
+    local monitors_json="${2-}"
+    if [[ $# -lt 2 ]] && command -v hyprctl >/dev/null 2>&1; then
+        monitors_json="$(hyprctl monitors -j 2>/dev/null || true)"
+    fi
+    if [[ -n "${monitors_json}" ]] && command -v jq >/dev/null 2>&1; then
+        local sc=""
+        sc="$(printf "%s" "${monitors_json}" | jq -r --arg out "${target_out}" '
+            if type == "array" then
+                (map(select((.name? // "") == $out)) | .[0].scale // empty)
+            else
+                empty
+            end
+        ' 2>/dev/null || true)"
+        if [[ "${sc}" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v s="${sc}" 'BEGIN { exit !(s > 0) }'; then
+            printf "%s" "${sc}"
+            return 0
+        fi
+    fi
+    if [[ "${target_out}" =~ ^(eDP|EDP|DSI|LVDS) ]]; then
+        printf "2"
+    else
+        printf "1"
+    fi
+}
+
+apply_niri_refresh_mode() {
+    local target_hz="$1"
+    local fallback_res="$2"
+    local out_name="${3:-$(detect_niri_internal_output)}"
+    local chosen_mode=""
+
+    if command -v jq >/dev/null 2>&1; then
+        if [[ "${target_hz}" == "120" ]]; then
+            chosen_mode="$(niri msg --json outputs 2>/dev/null | jq -r --arg out "${out_name}" '
+                .[$out].modes // []
+                | map(select((.refresh_rate / 1000) >= 100))
+                | max_by(.refresh_rate)
+                | select(. != null)
+                | "\(.width)x\(.height)@\(
+                    ((.refresh_rate | tostring) as $s |
+                     if ($s | length) > 3 then ($s[0:-3] + "." + $s[-3:]) else "120.000" end)
+                  )"
+            ' 2>/dev/null || true)"
+        else
+            chosen_mode="$(niri msg --json outputs 2>/dev/null | jq -r --arg out "${out_name}" '
+                .[$out].modes // []
+                | map(select((.refresh_rate / 1000) >= 48 and (.refresh_rate / 1000) <= 65))
+                | max_by(.refresh_rate)
+                | select(. != null)
+                | "\(.width)x\(.height)@\(
+                    ((.refresh_rate | tostring) as $s |
+                     if ($s | length) > 3 then ($s[0:-3] + "." + $s[-3:]) else "60.000" end)
+                  )"
+            ' 2>/dev/null || true)"
+        fi
+    fi
+
+    if [[ -z "${chosen_mode}" || "${chosen_mode}" == "null" || "${chosen_mode}" == *"null"* ]]; then
+        if [[ "${target_hz}" == "120" ]]; then
+            chosen_mode="${fallback_res}@120.000"
+        else
+            chosen_mode="${fallback_res}@60.000"
+        fi
+    fi
+
+    niri msg output "${out_name}" mode "${chosen_mode}" >/dev/null 2>&1 || true
+}
+
+menu_display_comfort() {
+    local nl_stat rr_stat choice rate_file panel_res niri_out hypr_out hypr_scale monitors_json
+    nl_stat="$(get_night_light_status)"
+    rr_stat="$(get_refresh_rate_status)"
+    rate_file="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/silicy-refresh-rate"
+    panel_res="$(detect_edp_resolution)"
+
+    choice="$(cat <<EOF | fuzzel_titanium "Display (NightLight: ${nl_stat} | ${rr_stat})  " 5 64
+1. Toggle Night Light (wlsunset 4200K)  — Loc anh sang xanh bao ve mat ban dem
+2. Set 120Hz ProMotion Adaptive         — Tan so quet sieu muot 120Hz
+3. Set 60Hz Battery Saver               — Co dinh 60Hz tiet kiem pin man hinh
+EOF
+)" || return 0
+
+    case "${choice}" in
+        1.*)
+            if pgrep -x wlsunset >/dev/null 2>&1; then
+                pkill -x wlsunset || true
+                osd_notify "Display Comfort" "Night Light filter disabled (6500K Daylight)" "weather-clear-symbolic"
+            else
+                if command -v wlsunset >/dev/null 2>&1; then
+                    nohup wlsunset -t 4200 -T 4201 >/dev/null 2>&1 &
+                fi
+                osd_notify "Display Comfort" "Night Light enabled (4200K Warm Titanium)" "weather-clear-night-symbolic"
+            fi
+            ;;
+        2.*)
+            if command -v niri >/dev/null 2>&1 && ([[ -n "${NIRI_SOCKET:-}" ]] || { [[ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && pgrep -x niri >/dev/null 2>&1; }); then
+                niri_out="$(detect_niri_internal_output)"
+                panel_res="$(detect_edp_resolution "${niri_out}")"
+                apply_niri_refresh_mode "120" "${panel_res}" "${niri_out}"
+                niri msg output "${niri_out}" vrr on >/dev/null 2>&1 || true
+            elif command -v hyprctl >/dev/null 2>&1 && ([[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || pgrep -x Hyprland >/dev/null 2>&1); then
+                monitors_json="$(hyprctl monitors -j 2>/dev/null || true)"
+                hypr_out="$(detect_hyprland_internal_output "${monitors_json}")"
+                panel_res="$(detect_hyprland_output_resolution "${hypr_out}" "${monitors_json}")"
+                hypr_scale="$(detect_hyprland_output_scale "${hypr_out}" "${monitors_json}")"
+                hyprctl keyword monitor "${hypr_out},highrr,auto,${hypr_scale}" >/dev/null 2>&1 || \
+                    hyprctl keyword monitor "${hypr_out},preferred,auto,${hypr_scale}" >/dev/null 2>&1 || true
+            fi
+            if [[ -d "${rate_file%/*}" ]]; then
+                printf "120Hz ProMotion" > "${rate_file}" 2>/dev/null || true
+            fi
+            osd_notify "Display Refresh Rate" "Switched to 120Hz ProMotion Adaptive (${panel_res})" "video-display-symbolic"
+            ;;
+        3.*)
+            if command -v niri >/dev/null 2>&1 && ([[ -n "${NIRI_SOCKET:-}" ]] || { [[ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && pgrep -x niri >/dev/null 2>&1; }); then
+                niri_out="$(detect_niri_internal_output)"
+                panel_res="$(detect_edp_resolution "${niri_out}")"
+                niri msg output "${niri_out}" vrr off >/dev/null 2>&1 || true
+                apply_niri_refresh_mode "60" "${panel_res}" "${niri_out}"
+            elif command -v hyprctl >/dev/null 2>&1 && ([[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || pgrep -x Hyprland >/dev/null 2>&1); then
+                monitors_json="$(hyprctl monitors -j 2>/dev/null || true)"
+                hypr_out="$(detect_hyprland_internal_output "${monitors_json}")"
+                panel_res="$(detect_hyprland_output_resolution "${hypr_out}" "${monitors_json}")"
+                hypr_scale="$(detect_hyprland_output_scale "${hypr_out}" "${monitors_json}")"
+                hyprctl keyword monitor "${hypr_out},${panel_res}@60,auto,${hypr_scale}" >/dev/null 2>&1 || true
+            fi
+            if [[ -d "${rate_file%/*}" ]]; then
+                printf "60Hz Fixed" > "${rate_file}" 2>/dev/null || true
+            fi
+            osd_notify "Display Refresh Rate" "Locked to 60Hz Battery Saver (${panel_res})" "video-display-symbolic"
+            ;;
+    esac
+}
+
+apply_keyboard_mode() {
+    local target_kb="$1"
+    case "${target_kb}" in
+        mac|Mac*)
+            if silicy-ctl keyboard-mode mac >/dev/null 2>&1 || \
+               ([[ -z "${SILICY_SYSROOT:-}" ]] && sudo -n /usr/local/bin/silicy-ctl keyboard-mode mac >/dev/null 2>&1); then
+                if [[ -z "${SILICY_SYSROOT:-}" ]]; then
+                    sudo -n /usr/bin/keyd reload 2>/dev/null || keyd reload 2>/dev/null || \
+                        sudo -n /usr/bin/systemctl restart keyd.service 2>/dev/null || true
+                    if command -v keyd-application-mapper >/dev/null 2>&1 && \
+                       ! pgrep -u "${USER:-$(id -un)}" -f keyd-application-mapper >/dev/null 2>&1; then
+                        nohup keyd-application-mapper -d >/dev/null 2>&1 &
+                    fi
+                fi
+                osd_notify "Keyboard Mode" "Activated Mac Standard (Command Smart Sync)" "input-keyboard-symbolic"
+            else
+                osd_notify "Keyboard Mode" "Failed to switch to Mac Standard" "dialog-error-symbolic"
+                return 1
+            fi
+            ;;
+        pc|PC*)
+            if silicy-ctl keyboard-mode pc >/dev/null 2>&1 || \
+               ([[ -z "${SILICY_SYSROOT:-}" ]] && sudo -n /usr/local/bin/silicy-ctl keyboard-mode pc >/dev/null 2>&1); then
+                if [[ -z "${SILICY_SYSROOT:-}" ]]; then
+                    pkill -u "${USER:-$(id -un)}" -f keyd-application-mapper 2>/dev/null || true
+                    sudo -n /usr/bin/keyd reload 2>/dev/null || keyd reload 2>/dev/null || \
+                        sudo -n /usr/bin/systemctl restart keyd.service 2>/dev/null || true
+                fi
+                osd_notify "Keyboard Mode" "Activated PC Standard (Ctrl / Super Swap)" "input-keyboard-symbolic"
+            else
+                osd_notify "Keyboard Mode" "Failed to switch to PC Standard" "dialog-error-symbolic"
+                return 1
+            fi
+            ;;
+        *)
+            osd_notify "Keyboard Mode" "Invalid keyboard mode: ${target_kb}" "dialog-error-symbolic"
+            return 1
+            ;;
+    esac
+}
+
+menu_keyboard_mode() {
+    if [[ -n "${1:-}" ]]; then
+        apply_keyboard_mode "$1"
+        return $?
+    fi
+    local kb_stat choice
+    kb_stat="$(get_keyboard_mode)"
+
+    choice="$(cat <<EOF | fuzzel_titanium "Keyboard Mode (${kb_stat})  " 3 64
+1. Chuan Mac (Command)  — Command+C/V/X/Z/A/W/T/Q tren GUI, Ctrl+C ngat trong Kitty
+2. Chuan PC (Ctrl)      — Dao phim Command <-> Ctrl toan cuc theo thoi quen PC
+EOF
+)" || return 0
+
+    case "${choice}" in
+        1.*) apply_keyboard_mode "mac" ;;
+        2.*) apply_keyboard_mode "pc" ;;
+    esac
+}
+
+menu_macos_bridge() {
+    local mnt_stat choice mnt_path shared_path
+    mnt_stat="$(get_macos_mount_status)"
+    mnt_path="/run/media/${USER:-silicy}/macOS"
+    shared_path="${HOME}/macOS-Shared"
+
+    choice="$(cat <<EOF | fuzzel_titanium "macOS Shared Drive (${mnt_stat})  " 4 64
+1. Mount & Open macOS APFS (Read-Only Safe Mode)  — Truy cap file macOS an toan
+2. Open Shared Exchange Folder                    — Mo thu muc trung chuyen chung
+3. Unmount macOS APFS Partition                   — Ngat ket noi phan vung macOS
+EOF
+)" || return 0
+
+    case "${choice}" in
+        1.*)
+            if sudo -n /usr/local/bin/silicy-macos-bridge --no-gui mount 2>/dev/null || silicy-macos-bridge --no-gui mount; then
+                osd_notify "macOS Data Bridge" "Mounted macOS APFS (Read-Only Safe Mode)" "folder-remote-symbolic"
+                if command -v kitty >/dev/null 2>&1 && [[ -n "${WAYLAND_DISPLAY:-}" ]] && [[ -d "${mnt_path}" ]]; then
+                    nohup kitty --working-directory "${mnt_path}" >/dev/null 2>&1 &
+                fi
+            else
+                osd_notify "macOS Data Bridge" "Mount failed (if FileVault encrypted, unlock in Kitty terminal)" "dialog-error-symbolic"
+            fi
+            ;;
+        2.*)
+            if sudo -n /usr/local/bin/silicy-macos-bridge --no-gui shared 2>/dev/null || silicy-macos-bridge --no-gui shared; then
+                osd_notify "macOS Data Bridge" "Opened exchange folder: ${shared_path}" "folder-remote-symbolic"
+                if command -v kitty >/dev/null 2>&1 && [[ -n "${WAYLAND_DISPLAY:-}" ]] && [[ -d "${shared_path}" ]]; then
+                    nohup kitty --working-directory "${shared_path}" >/dev/null 2>&1 &
+                fi
+            fi
+            ;;
+        3.*)
+            if sudo -n /usr/local/bin/silicy-macos-bridge --no-gui umount 2>/dev/null || silicy-macos-bridge --no-gui umount; then
+                osd_notify "macOS Data Bridge" "Safely unmounted macOS APFS partition" "folder-remote-symbolic"
+            fi
+            ;;
+    esac
+}
+
+menu_system_capsule() {
+    local choice
+    choice="$(cat <<'EOF' | fuzzel_titanium "System Capsule (Btrfs Zero-Space)  " 4 64
+1. Create Instant Restore Point  — Tao ban chup he thong Btrfs 0-byte ngay lap tuc
+2. Rollback to Previous Snapshot — Khoi phuc he thong ve ban chup truoc do (2 giay)
+3. Prune Old Snapshots (Keep 3)  — Don dep ban chup cu, chi giu 3 ban gan nhat
+EOF
+)" || return 0
+
+    case "${choice}" in
+        1.*)
+            if sudo -n /usr/local/bin/silicy-capsule create "manual-center" >/dev/null 2>&1 || \
+               /usr/local/bin/silicy-capsule create "manual-center" >/dev/null 2>&1; then
+                osd_notify "System Capsule" "Created read-only Btrfs snapshot in /.snapshots" "drive-harddisk-symbolic"
+            else
+                osd_notify "System Capsule" "Snapshot command executed (verify /.snapshots)" "drive-harddisk-symbolic"
+            fi
+            ;;
+        2.*)
+            if command -v kitty >/dev/null 2>&1 && [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+                kitty --title "silicyOS System Capsule Rollback" -e bash -c 'sudo /usr/local/bin/silicy-capsule rollback; echo ""; read -r -p "Press Enter to close..." _'
+            else
+                sudo /usr/local/bin/silicy-capsule rollback
+            fi
+            ;;
+        3.*)
+            sudo -n /usr/local/bin/silicy-capsule prune >/dev/null 2>&1 || \
+                /usr/local/bin/silicy-capsule prune >/dev/null 2>&1 || true
+            osd_notify "System Capsule" "Pruned older snapshots (retained latest 3)" "user-trash-symbolic"
+            ;;
+    esac
+}
+
+show_main_menu() {
+    local watts prof prof_upper bat_lim nl_stat rr_stat kb_stat mac_stat selection
+    watts="$(get_current_watts)"
+    prof="$(get_current_profile)"
+    prof_upper="$(printf "%s" "${prof}" | tr '[:lower:]' '[:upper:]')"
+    bat_lim="$(get_battery_limit)"
+    nl_stat="$(get_night_light_status)"
+    rr_stat="$(get_refresh_rate_status)"
+    kb_stat="$(get_keyboard_mode)"
+    mac_stat="$(get_macos_mount_status)"
+
+    selection="$(cat <<EOF | fuzzel_titanium "silicyOS Control Center  " 8 68
+[Power Profile]      Mode: ${prof_upper} (${watts}) — Chuyen doi Eco / Balanced / Burst
+[Battery Care]       MacSMC Limit: ${bat_lim}% — Khoa tran sac bao ve pin MacBook
+[Display Comfort]    Night Light: ${nl_stat} | ${rr_stat} — Anh sang xanh & 60/120Hz
+[Keyboard Mode]      Layout: ${kb_stat} — Chuyen doi Chuan Mac (Command) / PC (Ctrl)
+[macOS Shared Drive] Status: ${mac_stat} — Cau noi du lieu APFS Read-Only Safe Mode
+[System Capsule]     Btrfs Zero-Space Snapshot — Tao diem khoi phuc / Quay lui 2s
+[Shortcut Guide]     Bang tra cuu phim tat truc quan (Super + /)
+EOF
+)" || exit 0
+
+    case "${selection}" in
+        "[Power Profile]"*)      menu_power_profile ;;
+        "[Battery Care]"*)       menu_battery_care ;;
+        "[Display Comfort]"*)    menu_display_comfort ;;
+        "[Keyboard Mode]"*)      menu_keyboard_mode ;;
+        "[macOS Shared Drive]"*) menu_macos_bridge ;;
+        "[System Capsule]"*)     menu_system_capsule ;;
+        "[Shortcut Guide]"*)     show_shortcut_guide ;;
+        *)                       exit 0 ;;
+    esac
+}
+
+main() {
+    case "${1:-}" in
+        --shortcuts|shortcuts)
+            show_shortcut_guide
+            ;;
+        --power|power)
+            menu_power_profile "${2:-}"
+            ;;
+        --battery|battery)
+            menu_battery_care "${2:-}"
+            ;;
+        --display|display)
+            menu_display_comfort
+            ;;
+        --keyboard|keyboard)
+            menu_keyboard_mode "${2:-}"
+            ;;
+        --macos|macos)
+            menu_macos_bridge
+            ;;
+        --capsule|capsule)
+            menu_system_capsule
+            ;;
+        --help|-h)
+            printf "Usage: silicy-center [--shortcuts|--power [eco|balanced|burst]|--battery [60|80|100]|--display|--keyboard [mac|pc]|--macos|--capsule]\n"
+            ;;
+        *)
+            show_main_menu
+            ;;
+    esac
+}
+
+if [[ -n "${BASH_SOURCE[0]:-}" && "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

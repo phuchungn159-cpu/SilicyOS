@@ -1,0 +1,105 @@
+# ==============================================================================
+# /etc/ananicy.d/00-silicy-apple-silicon.rules
+# silicyOS Process Classification Rules for Apple Silicon M1/M2/M3
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. WAYLAND COMPOSITORS & DISPLAY PIPELINE -> P-CORES (pcores_rt)
+# ------------------------------------------------------------------------------
+{ "name": "Hyprland",                "type": "wayland-compositor" }
+{ "name": "sway",                    "type": "wayland-compositor" }
+{ "name": "niri",                    "type": "wayland-compositor" }
+{ "name": "river",                   "type": "wayland-compositor" }
+{ "name": "labwc",                   "type": "wayland-compositor" }
+{ "name": "weston",                  "type": "wayland-compositor" }
+{ "name": "seatd",                   "type": "wayland-compositor" }
+
+# ------------------------------------------------------------------------------
+# 2. PIPEWIRE & APPLE MCA SMART AMP DSP AUDIO -> P-CORES (pcores_rt)
+# ------------------------------------------------------------------------------
+{ "name": "pipewire",                "type": "audio-rt" }
+{ "name": "pipewire-pulse",          "type": "audio-rt" }
+{ "name": "wireplumber",             "type": "audio-rt" }
+{ "name": "rtkit-daemon",            "type": "audio-rt" }
+
+# ------------------------------------------------------------------------------
+# 3. MINIMALIST WAYLAND UI SHELL & TERMINALS -> P-CORES (pcores_interactive)
+# ------------------------------------------------------------------------------
+{ "name": "waybar",                  "type": "desktop-ui" }
+{ "name": "fuzzel",                  "type": "desktop-ui" }
+{ "name": "tofi",                    "type": "desktop-ui" }
+{ "name": "wofi",                    "type": "desktop-ui" }
+{ "name": "mako",                    "type": "desktop-ui" }
+{ "name": "fnott",                   "type": "desktop-ui" }
+{ "name": "swaybg",                  "type": "desktop-ui" }
+{ "name": "hyprpaper",               "type": "desktop-ui" }
+{ "name": "wl-paste",                "type": "desktop-ui" }
+{ "name": "wl-copy",                 "type": "desktop-ui" }
+
+{ "name": "foot",                    "type": "focused-terminal" }
+{ "name": "footclient",              "type": "focused-terminal" }
+{ "name": "alacritty",               "type": "focused-terminal" }
+{ "name": "kitty",                   "type": "focused-terminal" }
+{ "name": "wezterm-gui",             "type": "focused-terminal" }
+
+# ------------------------------------------------------------------------------
+# 4. FOREGROUND USER APPLICATIONS -> P-CORES (pcores_interactive)
+# ------------------------------------------------------------------------------
+{ "name": "nvim",                    "type": "interactive-app" }
+{ "name": "hx",                      "type": "interactive-app" }
+{ "name": "firefox",                 "type": "interactive-app" }
+{ "name": "firefox-bin",             "type": "interactive-app" }
+{ "name": "chromium",                "type": "interactive-app" }
+{ "name": "brave",                   "type": "interactive-app" }
+{ "name": "mpv",                     "type": "interactive-app" }
+{ "name": "imv-wayland",             "type": "interactive-app" }
+{ "name": "zathura",                 "type": "interactive-app" }
+
+# ------------------------------------------------------------------------------
+# 5. COMPILERS & BUILD TOOLS -> E-CORES + BATCH SCHEDULING (ecores_background)
+# ------------------------------------------------------------------------------
+{ "name": "clang",                   "type": "bg-compiler" }
+{ "name": "clang++",                 "type": "bg-compiler" }
+{ "name": "clang-19",                "type": "bg-compiler" }
+{ "name": "ld.lld",                  "type": "bg-compiler" }
+{ "name": "lld",                     "type": "bg-compiler" }
+{ "name": "llvm-ar",                 "type": "bg-compiler" }
+{ "name": "rustc",                   "type": "bg-compiler" }
+{ "name": "cargo",                   "type": "bg-compiler" }
+{ "name": "rust-analyzer",           "type": "bg-compiler" }
+{ "name": "cc1",                     "type": "bg-compiler" }
+{ "name": "cc1plus",                 "type": "bg-compiler" }
+{ "name": "make",                    "type": "bg-compiler" }
+{ "name": "ninja",                   "type": "bg-compiler" }
+{ "name": "cmake",                   "type": "bg-compiler" }
+{ "name": "makepkg",                 "type": "bg-compiler" }
+
+# ------------------------------------------------------------------------------
+# 6. SYSTEM UPDATES, LOGGING, ARCHIVERS -> E-CORES (ecores_background)
+# ------------------------------------------------------------------------------
+{ "name": "pacman",                  "type": "bg-system" }
+{ "name": "pacstrap",                "type": "bg-system" }
+{ "name": "systemd-journald",        "type": "bg-system" }
+{ "name": "systemd-udevd",           "type": "bg-system" }
+{ "name": "systemd-oomd",            "type": "bg-system" }
+{ "name": "logrotate",               "type": "bg-system" }
+{ "name": "btrfs",                   "type": "bg-system" }
+{ "name": "zstd",                    "type": "bg-system" }
+{ "name": "xz",                      "type": "bg-system" }
+{ "name": "gzip",                    "type": "bg-system" }
+{ "name": "tar",                     "type": "bg-system" }
+{ "name": "rsync",                   "type": "bg-system" }
+{ "name": "git",                     "type": "bg-system" }
+
+# ------------------------------------------------------------------------------
+# 7. INDEXERS, SCANNERS & IDLE WORKERS -> E-CORES STRICT IDLE (ecores_idle)
+# ------------------------------------------------------------------------------
+{ "name": "updatedb",                "type": "bg-indexer" }
+{ "name": "plocate-build",           "type": "bg-indexer" }
+{ "name": "mandb",                   "type": "bg-indexer" }
+{ "name": "baloo_file",              "type": "bg-indexer" }
+{ "name": "baloo_file_extractor",    "type": "bg-indexer" }
+{ "name": "tracker-miner-fs-3",      "type": "bg-indexer" }
+{ "name": "tracker-extract-3",       "type": "bg-indexer" }
+{ "name": "fstrim",                  "type": "bg-indexer" }
+{ "name": "fwupd",                   "type": "bg-indexer" }

@@ -1,0 +1,56 @@
+/* ============================================================================
+ * silicyOS SwayOSD HUD Stylesheet — Apple Industrial Titanium Frosted Glass
+ * Palette:
+ *   Background : #0B0B0E
+ *   Glass      : #141418
+ *   Border     : #26262E
+ *   Primary    : #F2F2F7
+ *   Secondary  : #8E8E93
+ *   Accent     : #0A84FF
+ * ============================================================================ */
+
+window#osd {
+  padding: 14px 22px;
+  border-radius: 14px;
+  border: 1.5px solid #26262E;
+  background: rgba(20, 20, 24, 0.88);
+  box-shadow: 0 8px 24px rgba(11, 11, 14, 0.65);
+}
+
+#container {
+  margin: 6px 10px;
+}
+
+image,
+label {
+  color: #F2F2F7;
+  font-family: "JetBrainsMono Nerd Font", monospace;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+progressbar:disabled,
+image:disabled {
+  opacity: 0.45;
+}
+
+progressbar {
+  min-height: 6px;
+  border-radius: 999px;
+  background: transparent;
+  border: none;
+}
+
+trough {
+  min-height: inherit;
+  border-radius: inherit;
+  border: 1px solid #26262E;
+  background: #0B0B0E;
+}
+
+progress {
+  min-height: inherit;
+  border-radius: inherit;
+  border: none;
+  background: #0A84FF;
+}

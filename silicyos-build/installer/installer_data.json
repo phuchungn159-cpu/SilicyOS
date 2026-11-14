@@ -1,0 +1,33 @@
+{
+  "os_list": [
+    {
+      "name": "silicyOS (CachyOS-ARM64 + Asahi 16K Ultra-Light)",
+      "default_os_name": "silicyOS",
+      "boot_object": "m1n1.bin",
+      "next_object": "m1n1/boot.bin",
+      "package": "silicyos-apple-silicon.zip",
+      "supported_fw": ["12.3", "12.3.1", "13.5", "14.5", "14.8.3", "15.0", "15.2", "26.0", "26.1", "26.2"],
+      "extras": {},
+      "partitions": [
+        {
+          "name": "EFI",
+          "type": "EFI",
+          "size": "524288000B",
+          "format": "fat",
+          "volume_id": "0x5171C905",
+          "copy_firmware": true,
+          "copy_installer_data": true,
+          "source": "esp"
+        },
+        {
+          "name": "silicyOS Rootfs (Btrfs zstd:3)",
+          "type": "Linux",
+          "size": "8589934592B",
+          "size_min": "8589934592B",
+          "expand": true,
+          "image": "rootfs.img"
+        }
+      ]
+    }
+  ]
+}

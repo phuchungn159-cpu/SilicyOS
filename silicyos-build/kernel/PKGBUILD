@@ -1,0 +1,322 @@
+# Maintainer: silicyOS Architect <architect@silicyos.org>
+# Target: Apple Silicon M1/M2/M3 (aarch64, 16KB Page Size, Clang ThinLTO, BORE Scheduler)
+
+pkgbase=linux-silicy-asahi
+pkgname=(
+  "${pkgbase}"
+  "${pkgbase}-headers"
+)
+_asahi_tag=asahi-6.12.12-1
+_kver=6.12.12
+_major=6.12
+pkgver=6.12.12.asahi1
+pkgrel=1
+pkgdesc="silicyOS Apple Silicon Kernel (linux-asahi + CachyOS BORE + Clang ThinLTO + 16KB Pages)"
+url="https://github.com/AsahiLinux/linux"
+arch=('aarch64')
+license=('GPL-2.0-only')
+makedepends=(
+  'bc'
+  'bison'
+  'clang'
+  'cpio'
+  'dtc'
+  'flex'
+  'git'
+  'kmod'
+  'libelf'
+  'lld'
+  'llvm'
+  'openssl'
+  'pahole'
+  'perl'
+  'python'
+  'rust'
+  'rust-bindgen'
+  'rust-src'
+  'tar'
+  'xz'
+  'zstd'
+)
+options=('!strip' '!debug' '!lto')
+_cachy_commit="master"
+source=(
+  "linux-asahi::git+https://github.com/AsahiLinux/linux.git#tag=${_asahi_tag}"
+  "0001-bore-cachy.patch::https://raw.githubusercontent.com/CachyOS/kernel-patches/${_cachy_commit}/${_major}/sched/0001-bore-cachy.patch"
+  "0002-bbr3-cachy.patch::https://raw.githubusercontent.com/CachyOS/kernel-patches/${_cachy_commit}/${_major}/0002-bbr3.patch"
+  "config.silicy"
+)
+sha256sums=(
+  'SKIP'
+  'SKIP'
+  'SKIP'
+  'SKIP'
+)
+
+export KBUILD_BUILD_HOST="silicyos-builder"
+export KBUILD_BUILD_USER="silicy"
+export KBUILD_BUILD_TIMESTAMP="$(date -Ru${SOURCE_DATE_EPOCH:+d @$SOURCE_DATE_EPOCH})"
+
+# Force LLVM/Clang Toolchain & Apple Silicon M-Series Optimization Flags
+export LLVM=1
+export LLVM_IAS=1
+export CC="clang"
+export CXX="clang++"
+export LD="ld.lld"
+export AR="llvm-ar"
+export NM="llvm-nm"
+export OBJCOPY="llvm-objcopy"
+export OBJDUMP="llvm-objdump"
+export READELF="llvm-readelf"
+export STRIP="llvm-strip"
+export KCFLAGS="-O3 -mcpu=apple-m1 -mtune=apple-m1 -pipe -Wno-error"
+export KCPPFLAGS="-O3 -mcpu=apple-m1 -mtune=apple-m1 -pipe"
+export KRUSTFLAGS="-C opt-level=3 -C target-cpu=apple-m1"
+
+prepare() {
+  cd "${srcdir}/linux-asahi"
+
+  msg2 "Setting localversion for silicyOS..."
+  echo "-${pkgrel}-silicy-bore" > localversion.10-pkgrel
+  echo "${pkgbase#linux}" > localversion.20-pkgname
+
+  msg2 "Applying CachyOS BORE (Burst-Oriented Response Enhancer) Scheduler patch..."
+  patch -Np1 --fuzz=3 -i "${srcdir}/0001-bore-cachy.patch"
+
+  msg2 "Applying CachyOS TCP BBRv3 congestion control patch..."
+  if [[ -f "${srcdir}/0002-bbr3-cachy.patch" ]]; then
+    patch -Np1 --fuzz=3 -i "${srcdir}/0002-bbr3-cachy.patch" || msg2 "BBRv3 already integrated or skipped cleanly"
+  fi
+
+  msg2 "Installing base silicyOS Apple Silicon kernel configuration..."
+  cp -vf "${srcdir}/config.silicy" .config
+
+  msg2 "Enforcing mandatory silicyOS architectural constraints via scripts/config..."
+  ./scripts/config \
+    --enable CONFIG_ARM64_16K_PAGES \
+    --disable CONFIG_ARM64_4K_PAGES \
+    --disable CONFIG_ARM64_64K_PAGES \
+    --enable CONFIG_ARM64_VA_BITS_47 \
+    --enable CONFIG_ARM64_PA_BITS_48 \
+    --enable CONFIG_SCHED_BORE \
+    --enable CONFIG_SCHED_MC \
+    --enable CONFIG_ENERGY_MODEL \
+    --enable CONFIG_SCHEDUTIL \
+    --enable CONFIG_HZ_1000 \
+    --set-val CONFIG_HZ 1000 \
+    --enable CONFIG_PREEMPT \
+    --disable CONFIG_PREEMPT_NONE \
+    --disable CONFIG_PREEMPT_VOLUNTARY \
+    --enable CONFIG_PREEMPT_COUNT \
+    --enable CONFIG_PREEMPTION \
+    --enable CONFIG_PREEMPT_DYNAMIC \
+    --enable CONFIG_TICK_CPU_ACCOUNTING \
+    --enable CONFIG_NO_HZ_IDLE \
+    --enable CONFIG_HIGH_RES_TIMERS \
+    --enable CONFIG_LTO_CLANG_THIN \
+    --disable CONFIG_LTO_NONE \
+    --enable CONFIG_ARCH_SUPPORTS_LTO_CLANG \
+    --enable CONFIG_ARCH_SUPPORTS_LTO_CLANG_THIN \
+    --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE \
+    --disable CONFIG_CC_OPTIMIZE_FOR_SIZE \
+    --enable CONFIG_RUST \
+    --disable CONFIG_GCC_PLUGINS \
+    --enable CONFIG_ZRAM \
+    --enable CONFIG_ZRAM_BACKEND_ZSTD \
+    --set-str CONFIG_ZRAM_DEF_COMP "zstd" \
+    --enable CONFIG_ZSMALLOC \
+    --enable CONFIG_BTRFS_FS \
+    --enable CONFIG_BTRFS_FS_POSIX_ACL \
+    --enable CONFIG_TCP_CONG_BBR \
+    --set-str CONFIG_DEFAULT_TCP_CONG "bbr" \
+    --enable CONFIG_NET_SCH_FQ \
+    --enable CONFIG_ARCH_APPLE \
+    --enable CONFIG_ARM_APPLE_SOC_CPUFREQ \
+    --enable CONFIG_APPLE_ADMAC \
+    --enable CONFIG_APPLE_AIC \
+    --enable CONFIG_APPLE_DART \
+    --enable CONFIG_APPLE_MBOX \
+    --enable CONFIG_APPLE_PMGR_PWRSTATE \
+    --enable CONFIG_APPLE_RTKIT \
+    --enable CONFIG_APPLE_SART \
+    --enable CONFIG_APPLE_SMC \
+    --enable CONFIG_APPLE_SMC_RTKIT \
+    --module CONFIG_DRM_ASAHI \
+    --module CONFIG_DRM_APPLE \
+    --module CONFIG_BLK_DEV_NVME \
+    --module CONFIG_NVME_APPLE \
+    --module CONFIG_SND_SOC_APPLE_MCA \
+    --module CONFIG_SND_SOC_TAS2764 \
+    --module CONFIG_SND_SOC_TAS2770 \
+    --module CONFIG_SND_SOC_CS42L42 \
+    --module CONFIG_SND_SOC_CS42L84 \
+    --module CONFIG_BRCMFMAC \
+    --disable CONFIG_DRM_AMDGPU \
+    --disable CONFIG_DRM_RADEON \
+    --disable CONFIG_DRM_NOUVEAU \
+    --disable CONFIG_DRM_I915 \
+    --disable CONFIG_DRM_XE \
+    --disable CONFIG_DRM_ETNAVIV \
+    --disable CONFIG_DRM_LIMA \
+    --disable CONFIG_DRM_PANFROST \
+    --disable CONFIG_DRM_PANTHOR \
+    --disable CONFIG_DRM_MSM \
+    --disable CONFIG_DRM_TEGRA \
+    --disable CONFIG_DRM_VC4 \
+    --disable CONFIG_DRM_V3D \
+    --disable CONFIG_WLAN_VENDOR_INTEL \
+    --disable CONFIG_WLAN_VENDOR_ATH \
+    --disable CONFIG_WLAN_VENDOR_REALTEK \
+    --disable CONFIG_WLAN_VENDOR_MEDIATEK \
+    --disable CONFIG_WLAN_VENDOR_RALINK \
+    --disable CONFIG_WLAN_VENDOR_MARVELL \
+    --disable CONFIG_WLAN_VENDOR_TI \
+    --disable CONFIG_NET_VENDOR_INTEL \
+    --disable CONFIG_NET_VENDOR_AMD \
+    --disable CONFIG_NET_VENDOR_NVIDIA \
+    --disable CONFIG_NET_VENDOR_CISCO \
+    --disable CONFIG_NET_VENDOR_CHELSIO \
+    --disable CONFIG_NET_VENDOR_MELLANOX \
+    --disable CONFIG_NET_VENDOR_QLOGIC \
+    --disable CONFIG_NET_VENDOR_BROCADE \
+    --disable CONFIG_INFINIBAND \
+    --disable CONFIG_ISDN \
+    --disable CONFIG_Amateur_Radio \
+    --disable CONFIG_HAMRADIO \
+    --disable CONFIG_CAN \
+    --disable CONFIG_PCMCIA \
+    --disable CONFIG_PCCARD \
+    --disable CONFIG_FPGA \
+    --disable CONFIG_SOUNDWIRE \
+    --disable CONFIG_ACPI \
+    --disable CONFIG_KPROBES \
+    --disable CONFIG_FTRACE \
+    --disable CONFIG_DEBUG_INFO \
+    --enable CONFIG_DEBUG_INFO_NONE \
+    --disable CONFIG_DEBUG_KERNEL \
+    --disable CONFIG_SLUB_DEBUG \
+    --disable CONFIG_LOCK_STAT \
+    --disable CONFIG_PROVE_LOCKING
+
+  msg2 "Resolving kernel configuration dependencies via LLVM..."
+  make LLVM=1 LLVM_IAS=1 olddefconfig
+  make -s kernelrelease > version
+  msg2 "Prepared ${pkgbase} version $(<version)"
+}
+
+build() {
+  cd "${srcdir}/linux-asahi"
+  msg2 "Compiling kernel Image, Image.gz, modules, and Apple Silicon DTBs with Clang ThinLTO + -O3 -mcpu=apple-m1..."
+  make LLVM=1 LLVM_IAS=1 \
+    KCFLAGS="${KCFLAGS}" \
+    KCPPFLAGS="${KCPPFLAGS}" \
+    KRUSTFLAGS="${KRUSTFLAGS}" \
+    -j"$(nproc)" \
+    Image Image.gz modules dtbs
+}
+
+_package() {
+  pkgdesc="The ${pkgdesc} kernel and modules"
+  depends=(
+    'coreutils'
+    'initramfs'
+    'kmod'
+  )
+  optdepends=(
+    'asahi-fwextract: Apple Silicon Wi-Fi, Bluetooth, GPU, and DCP firmware extraction'
+    'linux-firmware-silicy: Minimalist Apple/Broadcom firmware subset'
+    'wireless-regdb: Regulatory database for Broadcom 802.11ax Wi-Fi'
+  )
+  provides=(
+    'VIRTUALBOX-GUEST-MODULES'
+    'WIREGUARD-MODULE'
+    'KSMBD-MODULE'
+    "linux=${pkgver}"
+    "linux-asahi=${pkgver}"
+  )
+  replaces=(
+    'linux-asahi'
+  )
+
+  cd "${srcdir}/linux-asahi"
+  local kernver="$(<version)"
+  local modulesdir="${pkgdir}/usr/lib/modules/${kernver}"
+
+  msg2 "Installing boot image (Image & Image.gz)..."
+  install -Dm644 arch/arm64/boot/Image "${modulesdir}/vmlinuz"
+  install -Dm644 arch/arm64/boot/Image "${pkgdir}/boot/Image"
+  install -Dm644 arch/arm64/boot/Image.gz "${pkgdir}/boot/Image.gz"
+  echo "${pkgbase}" | install -Dm644 /dev/stdin "${modulesdir}/pkgbase"
+
+  msg2 "Installing and compressing kernel modules with zstd -19..."
+  ZSTD_CLEVEL=19 make LLVM=1 LLVM_IAS=1 \
+    INSTALL_MOD_PATH="${pkgdir}/usr" \
+    INSTALL_MOD_STRIP=1 \
+    DEPMOD=/doesnt/exist \
+    modules_install
+
+  msg2 "Installing Apple Silicon Device Tree Blobs (t8103/t6000/t6020/t8112/t8122)..."
+  install -dm755 "${modulesdir}/dtbs"
+  cp -a arch/arm64/boot/dts/apple/*.dtb "${modulesdir}/dtbs/"
+  install -dm755 "${pkgdir}/boot/dtbs/${pkgbase}"
+  cp -a arch/arm64/boot/dts/apple/*.dtb "${pkgdir}/boot/dtbs/${pkgbase}/"
+
+  # Remove build and source symlinks from main package
+  rm -f "${modulesdir}/build" "${modulesdir}/source"
+}
+
+_package-headers() {
+  pkgdesc="Headers and scripts for building modules for the ${pkgdesc} kernel"
+  depends=(
+    'pahole'
+    "${pkgbase}"
+  )
+  provides=(
+    "linux-headers=${pkgver}"
+    "linux-asahi-headers=${pkgver}"
+  )
+
+  cd "${srcdir}/linux-asahi"
+  local builddir="${pkgdir}/usr/lib/modules/$(<version)/build"
+
+  msg2 "Installing build files..."
+  install -Dt "${builddir}" -m644 .config Makefile Module.symvers System.map \
+    localversion.* version vmlinux
+  install -Dt "${builddir}/kernel" -m644 kernel/Makefile
+  install -Dt "${builddir}/arch/arm64" -m644 arch/arm64/Makefile
+  cp -t "${builddir}" -a scripts
+
+  msg2 "Installing header files..."
+  cp -t "${builddir}" -a include
+  cp -t "${builddir}/arch/arm64" -a arch/arm64/include
+  install -Dt "${builddir}/arch/arm64/kernel" -m644 arch/arm64/kernel/asm-offsets.s
+
+  install -Dt "${builddir}/drivers/md" -m644 drivers/md/*.h
+  install -Dt "${builddir}/net/mac80211" -m644 net/mac80211/*.h
+
+  find "${builddir}" -type f -name '*.o' -delete
+
+  msg2 "Removing unneeded architectures..."
+  local arch
+  for arch in "${builddir}"/arch/*/; do
+    [[ $arch = */arm64/ ]] && continue
+    rm -r "$arch"
+  done
+
+  msg2 "Removing documentation..."
+  rm -rf "${builddir}/Documentation"
+
+  msg2 "Fixing permissions..."
+  chmod -R u=rwX,go=rX "${builddir}"
+
+  msg2 "Adding symlink..."
+  mkdir -p "${pkgdir}/usr/src"
+  ln -sr "${builddir}" "${pkgdir}/usr/src/${pkgbase}"
+}
+
+for _p in "${pkgname[@]}"; do
+  eval "package_$_p() {
+    $(declare -f "_package${_p#$pkgbase}")
+    _package${_p#$pkgbase}
+  }"
+done

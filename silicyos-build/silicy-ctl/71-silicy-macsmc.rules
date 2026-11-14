@@ -1,0 +1,24 @@
+# ==============================================================================
+# /etc/udev/rules.d/71-silicy-macsmc.rules
+# silicyOS Apple SMC Battery Charge Threshold & CPU Frequency Group Permissions
+# Grants 'wheel' group direct write access without sudo and restores charge
+# threshold from /etc/silicy-battery.conf automatically on boot.
+# ==============================================================================
+
+# 1. Grant wheel group write access to macsmc-battery charge thresholds & restore saved limit
+ACTION=="add|change", SUBSYSTEM=="power_supply", KERNEL=="macsmc-battery", \
+  RUN+="/bin/chgrp wheel /sys/class/power_supply/macsmc-battery/charge_control_end_threshold", \
+  RUN+="/bin/chmod 0664 /sys/class/power_supply/macsmc-battery/charge_control_end_threshold", \
+  RUN+="/bin/sh -c 'chgrp wheel /sys/class/power_supply/macsmc-battery/charge_control_start_threshold 2>/dev/null && chmod 0664 /sys/class/power_supply/macsmc-battery/charge_control_start_threshold 2>/dev/null || true'", \
+  RUN+="/bin/sh -c 'if [ -r /etc/silicy-battery.conf ]; then head -n1 /etc/silicy-battery.conf > /sys/class/power_supply/macsmc-battery/charge_control_end_threshold 2>/dev/null || true; fi'"
+
+# 2. Grant wheel group write access to Apple Silicon cpufreq governor and frequency nodes (traverse cpufreq symlink)
+ACTION=="add|change", SUBSYSTEM=="cpu", KERNEL=="cpu[0-9]*", \
+  RUN+="/bin/sh -c 'if [ -d /sys/devices/system/cpu/%k/cpufreq ]; then chgrp -R -L wheel /sys/devices/system/cpu/%k/cpufreq/ 2>/dev/null || true; chgrp wheel /sys/devices/system/cpu/%k/cpufreq/scaling_governor /sys/devices/system/cpu/%k/cpufreq/scaling_max_freq /sys/devices/system/cpu/%k/cpufreq/scaling_min_freq 2>/dev/null || true; chmod 0664 /sys/devices/system/cpu/%k/cpufreq/scaling_governor /sys/devices/system/cpu/%k/cpufreq/scaling_max_freq /sys/devices/system/cpu/%k/cpufreq/scaling_min_freq 2>/dev/null || true; fi'"
+
+# 3. Grant wheel group write access to Apple MacBook keyboard & display backlights
+ACTION=="add|change", SUBSYSTEM=="leds", KERNEL=="*kbd_backlight*", \
+  RUN+="/bin/sh -c 'chgrp wheel /sys/class/leds/%k/brightness 2>/dev/null && chmod 0664 /sys/class/leds/%k/brightness 2>/dev/null || true'"
+
+ACTION=="add|change", SUBSYSTEM=="backlight", \
+  RUN+="/bin/sh -c 'chgrp wheel /sys/class/backlight/%k/brightness 2>/dev/null && chmod 0664 /sys/class/backlight/%k/brightness 2>/dev/null || true'"

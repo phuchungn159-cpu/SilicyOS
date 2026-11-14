@@ -1,0 +1,18 @@
+# ==============================================================================
+# /etc/ananicy.d/00-types.types
+# silicyOS Process Type Profiles for Apple Silicon Heterogeneous P/E Clusters
+# ==============================================================================
+
+# P-Core Realtime Audio & Display Server (Firestorm / Avalanche / Everest)
+{ "type": "wayland-compositor", "nice": -15, "ioclass": "realtime",    "ionice": 0, "sched": "rr",     "rtprio": 20, "oom_score_adj": -900, "cgroup": "pcores_rt" }
+{ "type": "audio-rt",           "nice": -18, "ioclass": "realtime",    "ionice": 0, "sched": "fifo",   "rtprio": 65, "oom_score_adj": -900, "cgroup": "pcores_rt" }
+
+# P-Core Interactive Desktop & Focused Workloads
+{ "type": "focused-terminal",   "nice": -10, "ioclass": "best-effort", "ionice": 0, "sched": "normal", "oom_score_adj": -300, "cgroup": "pcores_interactive" }
+{ "type": "desktop-ui",         "nice": -5,  "ioclass": "best-effort", "ionice": 1, "sched": "normal", "oom_score_adj": -200, "cgroup": "pcores_interactive" }
+{ "type": "interactive-app",    "nice": -4,  "ioclass": "best-effort", "ionice": 2, "sched": "normal", "oom_score_adj": 0,    "cgroup": "pcores_interactive" }
+
+# E-Core Background, Compilers, Package Managers, Indexers & Loggers (Icestorm / Blizzard / Sawtooth)
+{ "type": "bg-compiler",        "nice": 10,  "ioclass": "best-effort", "ionice": 6, "sched": "batch",  "oom_score_adj": 300,  "cgroup": "ecores_background" }
+{ "type": "bg-system",          "nice": 15,  "ioclass": "idle",        "ionice": 7, "sched": "batch",  "oom_score_adj": 400,  "cgroup": "ecores_background" }
+{ "type": "bg-indexer",         "nice": 19,  "ioclass": "idle",        "ionice": 7, "sched": "idle",   "oom_score_adj": 800,  "cgroup": "ecores_idle" }

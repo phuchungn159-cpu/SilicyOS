@@ -1,0 +1,49 @@
+# ==============================================================================
+# /etc/udev/rules.d/70-silicy-io.rules
+# silicyOS Block I/O, Apple ANS2 NVMe, ZRAM & Power Management Rules
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. APPLE ANS2 INTERNAL NVMe SSD (nvme0n1 / nvme*n*)
+# ------------------------------------------------------------------------------
+# Apple ANS2 NVMe controller uses hardware-managed submission queues over RTKit.
+# Use 'none' I/O scheduler to eliminate kernel queuing overhead, align readahead
+# to 256KB (16 x 16KB pages), and disable iostats/entropy overhead.
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="nvme[0-9]*n[0-9]*", ATTR{queue/rotational}=="0", \
+  ATTR{queue/scheduler}="none", \
+  ATTR{queue/read_ahead_kb}="256", \
+  ATTR{queue/nr_requests}="1024", \
+  ATTR{queue/rq_affinity}="2", \
+  ATTR{queue/nomerges}="0", \
+  ATTR{queue/add_random}="0", \
+  ATTR{queue/iostats}="0", \
+  ATTR{queue/wbt_lat_usec}="2000"
+
+# ------------------------------------------------------------------------------
+# 2. ZRAM SWAP DEVICES (zram0) - 16KB PAGE ALIGNED ZERO READAHEAD
+# ------------------------------------------------------------------------------
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="zram[0-9]*", \
+  ATTR{queue/rotational}="0", \
+  ATTR{queue/read_ahead_kb}="0", \
+  ATTR{queue/add_random}="0", \
+  ATTR{queue/iostats}="0", \
+  ATTR{queue/nomerges}="2"
+
+# ------------------------------------------------------------------------------
+# 3. EXTERNAL USB / THUNDERBOLT FLASH & SSD STORAGE (sd[a-z])
+# ------------------------------------------------------------------------------
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="0", \
+  ATTR{queue/scheduler}="kyber", \
+  ATTR{queue/read_ahead_kb}="512", \
+  ATTR{queue/nr_requests}="256", \
+  ATTR{queue/rq_affinity}="2", \
+  ATTR{queue/add_random}="0", \
+  ATTR{queue/iostats}="0"
+
+# ------------------------------------------------------------------------------
+# 4. LOW-LATENCY REALTIME AUDIO & WAYLAND DRM PERMISSIONS
+# ------------------------------------------------------------------------------
+KERNEL=="rtc0", GROUP="audio", MODE="0660"
+KERNEL=="hpet", GROUP="audio", MODE="0660"
+SUBSYSTEM=="UDMABUF", GROUP="video", MODE="0660"
+SUBSYSTEM=="dma_heap", KERNEL=="system", GROUP="video", MODE="0660"

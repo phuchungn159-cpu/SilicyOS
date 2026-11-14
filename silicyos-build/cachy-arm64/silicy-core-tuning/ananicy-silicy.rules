@@ -1,0 +1,30 @@
+# ==============================================================================
+# /etc/ananicy.d/00-silicy-apple-silicon.rules (ananicy-silicy.rules)
+# silicyOS Process Classification Rules for Apple Silicon M1/M2/M3
+# ==============================================================================
+
+{ "name": "niri",                    "type": "wayland-compositor", "nice": -15, "ioclass": "realtime", "ionice": 0 }
+{ "name": "Hyprland",                "type": "wayland-compositor", "nice": -15, "ioclass": "realtime", "ionice": 0 }
+{ "name": "seatd",                   "type": "wayland-compositor", "nice": -12 }
+{ "name": "keyd",                    "type": "wayland-compositor", "nice": -15, "ioclass": "realtime", "ionice": 0 }
+{ "name": "swayosd-server",          "type": "desktop-ui",         "nice": -8  }
+{ "name": "swayosd-libinput-backend","type": "desktop-ui",         "nice": -10 }
+{ "name": "wlsunset",                "type": "desktop-ui",         "nice": 0   }
+{ "name": "pipewire",                "type": "audio-rt",           "nice": -18, "ioclass": "realtime", "ionice": 0 }
+{ "name": "pipewire-pulse",          "type": "audio-rt",           "nice": -18, "ioclass": "realtime", "ionice": 0 }
+{ "name": "wireplumber",             "type": "audio-rt",           "nice": -15 }
+{ "name": "speakersafetyd",          "type": "audio-rt",           "nice": -19, "ioclass": "realtime", "ionice": 0 }
+{ "name": "waybar",                  "type": "desktop-ui",         "nice": -5  }
+{ "name": "fuzzel",                  "type": "desktop-ui",         "nice": -10 }
+{ "name": "kitty",                   "type": "focused-terminal",   "nice": -8  }
+{ "name": "clang",                   "type": "bg-compiler",        "nice": 15,  "sched": "batch", "ioclass": "idle" }
+{ "name": "clang++",                 "type": "bg-compiler",        "nice": 15,  "sched": "batch", "ioclass": "idle" }
+{ "name": "ld.lld",                  "type": "bg-compiler",        "nice": 15,  "sched": "batch", "ioclass": "idle" }
+{ "name": "rustc",                   "type": "bg-compiler",        "nice": 15,  "sched": "batch", "ioclass": "idle" }
+{ "name": "cargo",                   "type": "bg-compiler",        "nice": 15,  "sched": "batch", "ioclass": "idle" }
+{ "name": "make",                    "type": "bg-compiler",        "nice": 15,  "sched": "batch", "ioclass": "idle" }
+{ "name": "ninja",                   "type": "bg-compiler",        "nice": 15,  "sched": "batch", "ioclass": "idle" }
+{ "name": "makepkg",                 "type": "bg-compiler",        "nice": 15,  "sched": "batch", "ioclass": "idle" }
+{ "name": "pacman",                  "type": "bg-system",          "nice": 10,  "ioclass": "best-effort", "ionice": 6 }
+{ "name": "btrfs",                   "type": "bg-system",          "nice": 12,  "ioclass": "idle" }
+{ "name": "zstd",                    "type": "bg-system",          "nice": 12,  "ioclass": "idle" }

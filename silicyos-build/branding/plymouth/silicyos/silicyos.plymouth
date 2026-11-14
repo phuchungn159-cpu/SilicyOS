@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=silicyOS Apple Silicon Boot Splash
+Description=Minimalist Apple Silicon Boot Logo for silicyOS (Vector SVG / 320px Center Mark)
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/silicyos
+ScriptFile=/usr/share/plymouth/themes/silicyos/silicyos.script

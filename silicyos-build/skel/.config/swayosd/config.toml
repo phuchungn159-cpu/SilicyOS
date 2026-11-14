@@ -1,0 +1,8 @@
+# ==============================================================================
+# ~/.config/swayosd/config.toml
+# silicyOS Frosted Glass HUD Configuration (Respects Asahi speakersafetyd 100%)
+# ==============================================================================
+
+[server]
+show_percentage = true
+max_volume = 100
