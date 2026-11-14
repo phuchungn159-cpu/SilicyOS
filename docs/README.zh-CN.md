@@ -1,8 +1,24 @@
+<div align="center">
+
+<img src="../silicyos-build/branding/mark-128.png" width="88" height="88" alt="silicyOS Mark">
+
 # silicyOS
 
-**语言:** [English](README.md) | [Tiếng Việt](README.vi.md) | [日本語](README.ja.md) | **简体中文**
+**专为 Apple Silicon 打造的 Arch Linux ARM64 — 16KB 页、CachyOS BORE、LLVM ThinLTO 与 Titanium Wayland**
+
+![Audit](https://img.shields.io/badge/Audit-205%20Checks%20Pass-0A84FF?style=flat-square&labelColor=141418)
+![Architecture](https://img.shields.io/badge/Arch-ARM64%20(16KB%20Pages)-0A84FF?style=flat-square&labelColor=141418)
+![Hardware](https://img.shields.io/badge/Target-Apple%20M1%20%7C%20M2%20%7C%20M3-141418?style=flat-square&labelColor=0B0B0E)
+![Wayland](https://img.shields.io/badge/Wayland-Niri%20%7C%20Hyprland-141418?style=flat-square&labelColor=0B0B0E)
+[![License: MIT](https://img.shields.io/badge/License-MIT-141418?style=flat-square&labelColor=0B0B0E)](../LICENSE)
+
+[English](../README.md) · [Tiếng Việt](README.vi.md) · [日本語](README.ja.md) · **简体中文**
+
+</div>
 
 `silicyOS` 是专为 Apple Silicon Mac（M1、M2、M3 系列）设计的 Arch Linux ARM64（`aarch64`）发行版。它将上游 Asahi Linux 16KB 页大小内核与 CachyOS BORE 交互式调度器、LLVM/Clang ThinLTO 编译、Btrfs 透明压缩以及遵循 **Apple Industrial Titanium** 视觉规范的 Wayland 桌面环境深度整合。
+
+仓库根目录快捷命令：`make verify`（8 阶段审计） | `make build-macos`（Lima Apple VZ 构建） | `make install-macos`（双系统安装）。
 
 ---
 
@@ -37,7 +53,7 @@ Apple Silicon 在内存页大小、异构大小核集群、NVMe 提交队列及�
 
 ## 2. 内核、调度器与网络协议栈
 
-源码：[`silicyos-build/kernel/PKGBUILD`](silicyos-build/kernel/PKGBUILD) | [`config.silicy`](silicyos-build/kernel/config.silicy) | [`99-silicy-cachyos.conf`](silicyos-build/cachy-arm64/silicy-core-tuning/99-silicy-cachyos.conf)
+源码：[`silicyos-build/kernel/PKGBUILD`](../silicyos-build/kernel/PKGBUILD) | [`config.silicy`](../silicyos-build/kernel/config.silicy) | [`99-silicy-cachyos.conf`](../silicyos-build/cachy-arm64/silicy-core-tuning/99-silicy-cachyos.conf)
 
 ### 内核构建配置 (`linux-silicy-asahi`)
 - **上游基线**：`AsahiLinux/linux` 标签 `asahi-6.12.12-1`（`pkgver=6.12.12.asahi1`）。
@@ -61,7 +77,7 @@ Apple Silicon 在内存页大小、异构大小核集群、NVMe 提交队列及�
 
 ## 3. 统一内存、ZRAM、I/O 与服务精简
 
-源码：[`memory/zram-generator.conf`](silicyos-build/memory/zram-generator.conf) | [`memory/earlyoom.conf`](silicyos-build/memory/earlyoom.conf) | [`70-silicy-io.rules`](silicyos-build/cachy-arm64/silicy-core-tuning/70-silicy-io.rules) | [`services/systemd-diet.sh`](silicyos-build/services/systemd-diet.sh)
+源码：[`memory/zram-generator.conf`](../silicyos-build/memory/zram-generator.conf) | [`memory/earlyoom.conf`](../silicyos-build/memory/earlyoom.conf) | [`70-silicy-io.rules`](../silicyos-build/cachy-arm64/silicy-core-tuning/70-silicy-io.rules) | [`services/systemd-diet.sh`](../silicyos-build/services/systemd-diet.sh)
 
 ### 统一内存保护 (`zram` + `earlyoom`)
 Apple Silicon 的 CPU 与 Asahi AGX GPU 共享 LPDDR 物理内存，内存耗尽时合成器往往先于内核 OOM 卡死：
@@ -87,7 +103,7 @@ Apple Silicon 的 CPU 与 Asahi AGX GPU 共享 LPDDR 物理内存，内存耗尽
 
 ## 4. 存储布局与 Btrfs 快照 (`silicy-capsule`)
 
-源码：[`storage/setup-btrfs-silicy.sh`](silicyos-build/storage/setup-btrfs-silicy.sh) | [`storage/silicy-capsule`](silicyos-build/storage/silicy-capsule) | [`00-silicy-capsule-pre.hook`](silicyos-build/storage/00-silicy-capsule-pre.hook) | [`99-clean-cache-and-recompress.hook`](silicyos-build/storage/99-clean-cache-and-recompress.hook)
+源码：[`storage/setup-btrfs-silicy.sh`](../silicyos-build/storage/setup-btrfs-silicy.sh) | [`storage/silicy-capsule`](../silicyos-build/storage/silicy-capsule) | [`00-silicy-capsule-pre.hook`](../silicyos-build/storage/00-silicy-capsule-pre.hook) | [`99-clean-cache-and-recompress.hook`](../silicyos-build/storage/99-clean-cache-and-recompress.hook)
 
 ### Btrfs 子卷规划
 所有子卷均使用 `compress-force=zstd:3,noatime,space_cache=v2` 挂载（`fstab` 中配合 `ssd,discard=async`）：
@@ -110,7 +126,7 @@ Apple Silicon 的 CPU 与 Asahi AGX GPU 共享 LPDDR 物理内存，内存耗尽
 
 ## 5. 纯 C 硬件控制器 (`silicy-ctl`)
 
-源码：[`silicyos-build/silicy-ctl/silicy-ctl.c`](silicyos-build/silicy-ctl/silicy-ctl.c) | [`Makefile`](silicyos-build/silicy-ctl/Makefile) | [`71-silicy-macsmc.rules`](silicyos-build/silicy-ctl/71-silicy-macsmc.rules)
+源码：[`silicyos-build/silicy-ctl/silicy-ctl.c`](../silicyos-build/silicy-ctl/silicy-ctl.c) | [`Makefile`](../silicyos-build/silicy-ctl/Makefile) | [`71-silicy-macsmc.rules`](../silicyos-build/silicy-ctl/71-silicy-macsmc.rules)
 
 `silicy-ctl` 采用严格 C11 标准（`-Wall -Wextra -Werror -O3 -mcpu=apple-m1 -flto=thin`）编写，零堆内存分配（不使用 `malloc`/`calloc`/`realloc`），全部 I/O 基于 `open()`, `pread()`, `pwrite()`，亲和性绑定调用 `sched_setaffinity()`。
 
@@ -151,7 +167,7 @@ Apple Silicon 的 CPU 与 Asahi AGX GPU 共享 LPDDR 物理内存，内存耗尽
 
 ## 6. 交互式控制中心 (`silicy-center`)
 
-源码：[`silicyos-build/scripts/silicy-center`](silicyos-build/scripts/silicy-center)
+源码：[`silicyos-build/scripts/silicy-center`](../silicyos-build/scripts/silicy-center)
 
 按 `Super + Ctrl + Space` 或点击 Waybar 系统模块打开，使用 Apple Industrial Titanium 配色的 `fuzzel --dmenu` 渲染：
 
@@ -174,7 +190,7 @@ Apple Silicon 的 CPU 与 Asahi AGX GPU 共享 LPDDR 物理内存，内存耗尽
 
 ## 7. 安全只读 macOS APFS ブリッジ (`silicy-macos-bridge`)
 
-源码：[`silicyos-build/storage/silicy-macos-bridge`](silicyos-build/storage/silicy-macos-bridge)
+源码：[`silicyos-build/storage/silicy-macos-bridge`](../silicyos-build/storage/silicy-macos-bridge)
 
 - **严格只读保护**：绝不以读写模式挂载 macOS APFS 容器，彻底杜绝 APFS 元数据损坏风险。
 - **Data 卷识别**：通过 `lsblk`（`PARTLABEL` / `FSTYPE=apfs`）并调用 `apfsutil`（`detect_apfs_volume_id`）自动优先选择 `Data` 卷（`* - Data`），同时支持 `--vol N` 手动指定卷编号。
@@ -186,7 +202,7 @@ Apple Silicon 的 CPU 与 Asahi AGX GPU 共享 LPDDR 物理内存，内存耗尽
 
 ## 8. 智能 `Command` 键同步与毛玻璃 HUD (`keyd` + `swayosd`)
 
-源码：[`input/keyd/default.conf`](silicyos-build/input/keyd/default.conf) | [`mac-mode.conf`](silicyos-build/input/keyd/mac-mode.conf) | [`pc-mode.conf`](silicyos-build/input/keyd/pc-mode.conf) | [`skel/.config/keyd/app.conf`](silicyos-build/skel/.config/keyd/app.conf) | [`skel/.config/swayosd/`](silicyos-build/skel/.config/swayosd/config.toml)
+源码：[`input/keyd/default.conf`](../silicyos-build/input/keyd/default.conf) | [`mac-mode.conf`](../silicyos-build/input/keyd/mac-mode.conf) | [`pc-mode.conf`](../silicyos-build/input/keyd/pc-mode.conf) | [`skel/.config/keyd/app.conf`](../silicyos-build/skel/.config/keyd/app.conf) | [`skel/.config/swayosd/`](../silicyos-build/skel/.config/swayosd/config.toml)
 
 ### 键盘映射架构 (`keyd`)
 - `/etc/keyd/` 目录下仅保留唯一活动配置 `default.conf`（预设隔离存放于 `/usr/share/silicyos/keyd/`），避免重复加载。

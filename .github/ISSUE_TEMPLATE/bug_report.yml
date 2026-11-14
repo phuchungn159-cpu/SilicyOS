@@ -1,0 +1,50 @@
+name: Bug Report
+description: Report a build, boot, hardware, or compositor defect on Apple Silicon
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Apple Silicon Mac Model
+      options:
+        - M1 / M1 Pro / M1 Max / M1 Ultra
+        - M2 / M2 Pro / M2 Max / M2 Ultra
+        - M3 / M3 Pro / M3 Max
+        - Lima VM / macOS Builder Host
+    validations:
+      required: true
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Subsystem
+      options:
+        - Build / Packaging (build-silicyos.sh / macos-build-and-install.sh)
+        - Bootchain / m1n1 / U-Boot / Btrfs
+        - Kernel / Sysctl / 16K Page / Ananicy
+        - silicy-ctl (Telemetry / Battery Guard / Power Profile)
+        - silicy-center / Waybar / SwayOSD
+        - silicy-capsule / silicy-macos-bridge
+        - keyd / Niri / Hyprland
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Git Commit or Release Version
+      placeholder: e.g. a58cd95 or v1.0.0
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description & Reproduction Steps
+      description: Clear steps to reproduce the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Command Output / Journal Logs
+      description: Attach relevant logs from verify-silicyos.sh, build-silicyos.sh, or journalctl.
+      render: shell

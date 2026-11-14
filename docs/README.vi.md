@@ -1,8 +1,24 @@
+<div align="center">
+
+<img src="../silicyos-build/branding/mark-128.png" width="88" height="88" alt="silicyOS Mark">
+
 # silicyOS
 
-**Ngôn ngữ:** [English](README.md) | **Tiếng Việt** | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
+**Arch Linux ARM64 Chuyên Biệt Cho Apple Silicon — Trang Nhớ 16KB, CachyOS BORE, LLVM ThinLTO & Wayland Titanium**
+
+![Audit](https://img.shields.io/badge/Audit-205%20Checks%20Pass-0A84FF?style=flat-square&labelColor=141418)
+![Architecture](https://img.shields.io/badge/Arch-ARM64%20(16KB%20Pages)-0A84FF?style=flat-square&labelColor=141418)
+![Hardware](https://img.shields.io/badge/Target-Apple%20M1%20%7C%20M2%20%7C%20M3-141418?style=flat-square&labelColor=0B0B0E)
+![Wayland](https://img.shields.io/badge/Wayland-Niri%20%7C%20Hyprland-141418?style=flat-square&labelColor=0B0B0E)
+[![License: MIT](https://img.shields.io/badge/License-MIT-141418?style=flat-square&labelColor=0B0B0E)](../LICENSE)
+
+[English](../README.md) · **Tiếng Việt** · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
+
+</div>
 
 `silicyOS` là bản phân phối Arch Linux ARM64 (`aarch64`) được thiết kế chuyên biệt cho máy Mac Apple Silicon (M1, M2, M3). Hệ điều hành kết hợp nhân Asahi Linux chuẩn trang nhớ 16KB với bộ lập lịch tương tác CachyOS BORE, biên dịch LLVM/Clang ThinLTO, hệ thống tệp Btrfs nén trong suốt và môi trường Wayland thống nhất theo quy chuẩn thiết kế **Apple Industrial Titanium**.
+
+Chạy kiểm toán nhanh từ thư mục gốc: `make verify` | Build trên macOS (Lima Apple VZ): `make build-macos` | Cài song song: `make install-macos`.
 
 ---
 
@@ -37,7 +53,7 @@ Phần cứng Apple Silicon khác biệt căn bản so với laptop x86_64 truy�
 
 ## 2. Nhân hệ điều hành, Bộ lập lịch & Mạng
 
-Mã nguồn: [`silicyos-build/kernel/PKGBUILD`](silicyos-build/kernel/PKGBUILD) | [`config.silicy`](silicyos-build/kernel/config.silicy) | [`99-silicy-cachyos.conf`](silicyos-build/cachy-arm64/silicy-core-tuning/99-silicy-cachyos.conf)
+Mã nguồn: [`silicyos-build/kernel/PKGBUILD`](../silicyos-build/kernel/PKGBUILD) | [`config.silicy`](../silicyos-build/kernel/config.silicy) | [`99-silicy-cachyos.conf`](../silicyos-build/cachy-arm64/silicy-core-tuning/99-silicy-cachyos.conf)
 
 ### Cấu hình build nhân (`linux-silicy-asahi`)
 - **Mã nguồn gốc**: `AsahiLinux/linux` tag `asahi-6.12.12-1` (`pkgver=6.12.12.asahi1`).
@@ -61,7 +77,7 @@ Mã nguồn: [`silicyos-build/kernel/PKGBUILD`](silicyos-build/kernel/PKGBUILD) 
 
 ## 3. Bộ nhớ hợp nhất, ZRAM, I/O & Tối giản dịch vụ
 
-Mã nguồn: [`memory/zram-generator.conf`](silicyos-build/memory/zram-generator.conf) | [`memory/earlyoom.conf`](silicyos-build/memory/earlyoom.conf) | [`70-silicy-io.rules`](silicyos-build/cachy-arm64/silicy-core-tuning/70-silicy-io.rules) | [`services/systemd-diet.sh`](silicyos-build/services/systemd-diet.sh)
+Mã nguồn: [`memory/zram-generator.conf`](../silicyos-build/memory/zram-generator.conf) | [`memory/earlyoom.conf`](../silicyos-build/memory/earlyoom.conf) | [`70-silicy-io.rules`](../silicyos-build/cachy-arm64/silicy-core-tuning/70-silicy-io.rules) | [`services/systemd-diet.sh`](../silicyos-build/services/systemd-diet.sh)
 
 ### Bảo vệ bộ nhớ hợp nhất (`zram` + `earlyoom`)
 Trên Apple Silicon, CPU và GPU Asahi AGX dùng chung RAM LPDDR. Nếu tràn RAM, compositor có thể treo cứng trước khi OOM của kernel kịp can thiệp:
@@ -87,7 +103,7 @@ Trên Apple Silicon, CPU và GPU Asahi AGX dùng chung RAM LPDDR. Nếu tràn RA
 
 ## 4. Phân vùng lưu trữ & Snapshot Btrfs (`silicy-capsule`)
 
-Mã nguồn: [`storage/setup-btrfs-silicy.sh`](silicyos-build/storage/setup-btrfs-silicy.sh) | [`storage/silicy-capsule`](silicyos-build/storage/silicy-capsule) | [`00-silicy-capsule-pre.hook`](silicyos-build/storage/00-silicy-capsule-pre.hook) | [`99-clean-cache-and-recompress.hook`](silicyos-build/storage/99-clean-cache-and-recompress.hook)
+Mã nguồn: [`storage/setup-btrfs-silicy.sh`](../silicyos-build/storage/setup-btrfs-silicy.sh) | [`storage/silicy-capsule`](../silicyos-build/storage/silicy-capsule) | [`00-silicy-capsule-pre.hook`](../silicyos-build/storage/00-silicy-capsule-pre.hook) | [`99-clean-cache-and-recompress.hook`](../silicyos-build/storage/99-clean-cache-and-recompress.hook)
 
 ### Cấu trúc Subvolume Btrfs
 Các subvolume được mount với tùy chọn `compress-force=zstd:3,noatime,space_cache=v2` (kèm `ssd,discard=async` trong `fstab`):
@@ -110,7 +126,7 @@ Các subvolume được mount với tùy chọn `compress-force=zstd:3,noatime,s
 
 ## 5. Lõi điều khiển phần cứng thuần C (`silicy-ctl`)
 
-Mã nguồn: [`silicyos-build/silicy-ctl/silicy-ctl.c`](silicyos-build/silicy-ctl/silicy-ctl.c) | [`Makefile`](silicyos-build/silicy-ctl/Makefile) | [`71-silicy-macsmc.rules`](silicyos-build/silicy-ctl/71-silicy-macsmc.rules)
+Mã nguồn: [`silicyos-build/silicy-ctl/silicy-ctl.c`](../silicyos-build/silicy-ctl/silicy-ctl.c) | [`Makefile`](../silicyos-build/silicy-ctl/Makefile) | [`71-silicy-macsmc.rules`](../silicyos-build/silicy-ctl/71-silicy-macsmc.rules)
 
 `silicy-ctl` tuân thủ chuẩn C11 nghiêm ngặt (`-Wall -Wextra -Werror -O3 -mcpu=apple-m1 -flto=thin`), không gọi `malloc`/`calloc`/`realloc`. Mọi thao tác đọc/ghi sysfs dùng `open()`, `pread()`, `pwrite()` và ghim nhân bằng `sched_setaffinity()`.
 
@@ -151,7 +167,7 @@ Mã nguồn: [`silicyos-build/silicy-ctl/silicy-ctl.c`](silicyos-build/silicy-ct
 
 ## 6. Trung tâm điều khiển tương tác (`silicy-center`)
 
-Mã nguồn: [`silicyos-build/scripts/silicy-center`](silicyos-build/scripts/silicy-center)
+Mã nguồn: [`silicyos-build/scripts/silicy-center`](../silicyos-build/scripts/silicy-center)
 
 Gọi bằng `Super + Ctrl + Space` hoặc click trên Waybar, dùng `fuzzel --dmenu` phối màu Apple Industrial Titanium:
 
@@ -174,7 +190,7 @@ Gọi bằng `Super + Ctrl + Space` hoặc click trên Waybar, dùng `fuzzel --d
 
 ## 7. Cầu nối dữ liệu macOS APFS an toàn (`silicy-macos-bridge`)
 
-Mã nguồn: [`silicyos-build/storage/silicy-macos-bridge`](silicyos-build/storage/silicy-macos-bridge)
+Mã nguồn: [`silicyos-build/storage/silicy-macos-bridge`](../silicyos-build/storage/silicy-macos-bridge)
 
 - **Chỉ đọc tuyệt đối**: Không bao giờ mount phân vùng macOS APFS ở chế độ ghi (RW), loại bỏ nguy cơ hỏng cấu trúc APFS của Apple.
 - **Nhận diện volume Data**: Dùng `lsblk` (`PARTLABEL` / `FSTYPE=apfs`) kết hợp `apfsutil` (`detect_apfs_volume_id`) để ưu tiên tự động volume `Data` (`* - Data`), hỗ trợ chỉ định thủ công `--vol N`.
@@ -186,7 +202,7 @@ Mã nguồn: [`silicyos-build/storage/silicy-macos-bridge`](silicyos-build/stora
 
 ## 8. Đồng bộ phím `Command` thông minh & HUD kính mờ (`keyd` + `swayosd`)
 
-Mã nguồn: [`input/keyd/default.conf`](silicyos-build/input/keyd/default.conf) | [`mac-mode.conf`](silicyos-build/input/keyd/mac-mode.conf) | [`pc-mode.conf`](silicyos-build/input/keyd/pc-mode.conf) | [`skel/.config/keyd/app.conf`](silicyos-build/skel/.config/keyd/app.conf) | [`skel/.config/swayosd/`](silicyos-build/skel/.config/swayosd/config.toml)
+Mã nguồn: [`input/keyd/default.conf`](../silicyos-build/input/keyd/default.conf) | [`mac-mode.conf`](../silicyos-build/input/keyd/mac-mode.conf) | [`pc-mode.conf`](../silicyos-build/input/keyd/pc-mode.conf) | [`skel/.config/keyd/app.conf`](../silicyos-build/skel/.config/keyd/app.conf) | [`skel/.config/swayosd/`](../silicyos-build/skel/.config/swayosd/config.toml)
 
 ### Kiến trúc bàn phím (`keyd`)
 - Chỉ duy nhất `/etc/keyd/default.conf` nằm trong `/etc/keyd/` (các preset cô lập tại `/usr/share/silicyos/keyd/`) để tránh nạp trùng cấu hình.

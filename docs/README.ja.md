@@ -1,8 +1,24 @@
+<div align="center">
+
+<img src="../silicyos-build/branding/mark-128.png" width="88" height="88" alt="silicyOS Mark">
+
 # silicyOS
 
-**言語:** [English](README.md) | [Tiếng Việt](README.vi.md) | **日本語** | [简体中文](README.zh-CN.md)
+**Apple Silicon 専用 Arch Linux ARM64 — 16KB ページ、CachyOS BORE、LLVM ThinLTO & Titanium Wayland**
+
+![Audit](https://img.shields.io/badge/Audit-205%20Checks%20Pass-0A84FF?style=flat-square&labelColor=141418)
+![Architecture](https://img.shields.io/badge/Arch-ARM64%20(16KB%20Pages)-0A84FF?style=flat-square&labelColor=141418)
+![Hardware](https://img.shields.io/badge/Target-Apple%20M1%20%7C%20M2%20%7C%20M3-141418?style=flat-square&labelColor=0B0B0E)
+![Wayland](https://img.shields.io/badge/Wayland-Niri%20%7C%20Hyprland-141418?style=flat-square&labelColor=0B0B0E)
+[![License: MIT](https://img.shields.io/badge/License-MIT-141418?style=flat-square&labelColor=0B0B0E)](../LICENSE)
+
+[English](../README.md) · [Tiếng Việt](README.vi.md) · **日本語** · [简体中文](README.zh-CN.md)
+
+</div>
 
 `silicyOS` は Apple Silicon Mac（M1 / M2 / M3 シリーズ）専用に設計された Arch Linux ARM64（`aarch64`）ディストリビューションです。Asahi Linux の 16KB ページサイズ対応カーネルに、CachyOS BORE インタラクティブスケジューラ、LLVM/Clang ThinLTO ビルド、Btrfs 透過圧縮、そして **Apple Industrial Titanium** デザイン仕様で統一された Wayland デスクトップ環境を統合しています。
+
+リポジトリルートからのクイック操作: `make verify`（検証） | `make build-macos`（macOS Apple VZ ビルド） | `make install-macos`（デュアルブート導入）。
 
 ---
 
@@ -37,7 +53,7 @@ Apple Silicon は、メモリページサイズ、ヘテロジニアス CPU ク�
 
 ## 2. カーネル・スケジューラ・ネットワークスタック
 
-ソース: [`silicyos-build/kernel/PKGBUILD`](silicyos-build/kernel/PKGBUILD) | [`config.silicy`](silicyos-build/kernel/config.silicy) | [`99-silicy-cachyos.conf`](silicyos-build/cachy-arm64/silicy-core-tuning/99-silicy-cachyos.conf)
+ソース: [`silicyos-build/kernel/PKGBUILD`](../silicyos-build/kernel/PKGBUILD) | [`config.silicy`](../silicyos-build/kernel/config.silicy) | [`99-silicy-cachyos.conf`](../silicyos-build/cachy-arm64/silicy-core-tuning/99-silicy-cachyos.conf)
 
 ### カーネルビルド構成 (`linux-silicy-asahi`)
 - **ベース**: `AsahiLinux/linux` タグ `asahi-6.12.12-1`（`pkgver=6.12.12.asahi1`）。
@@ -61,7 +77,7 @@ Apple Silicon は、メモリページサイズ、ヘテロジニアス CPU ク�
 
 ## 3. ユニファイドメモリ・ZRAM・I/O・サービス最適化
 
-ソース: [`memory/zram-generator.conf`](silicyos-build/memory/zram-generator.conf) | [`memory/earlyoom.conf`](silicyos-build/memory/earlyoom.conf) | [`70-silicy-io.rules`](silicyos-build/cachy-arm64/silicy-core-tuning/70-silicy-io.rules) | [`services/systemd-diet.sh`](silicyos-build/services/systemd-diet.sh)
+ソース: [`memory/zram-generator.conf`](../silicyos-build/memory/zram-generator.conf) | [`memory/earlyoom.conf`](../silicyos-build/memory/earlyoom.conf) | [`70-silicy-io.rules`](../silicyos-build/cachy-arm64/silicy-core-tuning/70-silicy-io.rules) | [`services/systemd-diet.sh`](../silicyos-build/services/systemd-diet.sh)
 
 ### ユニファイドメモリ保護 (`zram` + `earlyoom`)
 Apple Silicon は CPU と Asahi AGX GPU で物理 LPDDR メモリを共有するため、メモリ枯渇時にカーネル OOM より先にコンポジタが停止するリスクがあります。
@@ -87,7 +103,7 @@ Apple Silicon は CPU と Asahi AGX GPU で物理 LPDDR メモリを共有する
 
 ## 4. ストレージ構成と Btrfs スナップショット (`silicy-capsule`)
 
-ソース: [`storage/setup-btrfs-silicy.sh`](silicyos-build/storage/setup-btrfs-silicy.sh) | [`storage/silicy-capsule`](silicyos-build/storage/silicy-capsule) | [`00-silicy-capsule-pre.hook`](silicyos-build/storage/00-silicy-capsule-pre.hook) | [`99-clean-cache-and-recompress.hook`](silicyos-build/storage/99-clean-cache-and-recompress.hook)
+ソース: [`storage/setup-btrfs-silicy.sh`](../silicyos-build/storage/setup-btrfs-silicy.sh) | [`storage/silicy-capsule`](../silicyos-build/storage/silicy-capsule) | [`00-silicy-capsule-pre.hook`](../silicyos-build/storage/00-silicy-capsule-pre.hook) | [`99-clean-cache-and-recompress.hook`](../silicyos-build/storage/99-clean-cache-and-recompress.hook)
 
 ### Btrfs サブボリューム構成
 全サブボリュームは `compress-force=zstd:3,noatime,space_cache=v2`（`fstab` では `ssd,discard=async` 併用）でマウントされます。
@@ -110,7 +126,7 @@ Apple Silicon は CPU と Asahi AGX GPU で物理 LPDDR メモリを共有する
 
 ## 5. 純粋 C ハードウェアコントローラ (`silicy-ctl`)
 
-ソース: [`silicyos-build/silicy-ctl/silicy-ctl.c`](silicyos-build/silicy-ctl/silicy-ctl.c) | [`Makefile`](silicyos-build/silicy-ctl/Makefile) | [`71-silicy-macsmc.rules`](silicyos-build/silicy-ctl/71-silicy-macsmc.rules)
+ソース: [`silicyos-build/silicy-ctl/silicy-ctl.c`](../silicyos-build/silicy-ctl/silicy-ctl.c) | [`Makefile`](../silicyos-build/silicy-ctl/Makefile) | [`71-silicy-macsmc.rules`](../silicyos-build/silicy-ctl/71-silicy-macsmc.rules)
 
 `silicy-ctl` は厳格な C11（`-Wall -Wextra -Werror -O3 -mcpu=apple-m1 -flto=thin`）で実装され、`malloc`/`calloc`/`realloc` を一切使用しません。すべての I/O は `open()`, `pread()`, `pwrite()` を、CPU 固定は `sched_setaffinity()` を使用します。
 
@@ -151,7 +167,7 @@ Apple Silicon は CPU と Asahi AGX GPU で物理 LPDDR メモリを共有する
 
 ## 6. インタラクティブ・コントロールセンター (`silicy-center`)
 
-ソース: [`silicyos-build/scripts/silicy-center`](silicyos-build/scripts/silicy-center)
+ソース: [`silicyos-build/scripts/silicy-center`](../silicyos-build/scripts/silicy-center)
 
 `Super + Ctrl + Space` または Waybar クリックで起動する Apple Industrial Titanium 配色の `fuzzel --dmenu` UI です。
 
@@ -174,7 +190,7 @@ Apple Silicon は CPU と Asahi AGX GPU で物理 LPDDR メモリを共有する
 
 ## 7. 安全な読み取り専用 macOS APFS ブリッジ (`silicy-macos-bridge`)
 
-ソース: [`silicyos-build/storage/silicy-macos-bridge`](silicyos-build/storage/silicy-macos-bridge)
+ソース: [`silicyos-build/storage/silicy-macos-bridge`](../silicyos-build/storage/silicy-macos-bridge)
 
 - **厳格な読み取り専用**: macOS APFS コンテナを読み書きモードでマウントせず、APFS メタデータ破損を防止します。
 - **Data ボリューム自動選択**: `lsblk`（`PARTLABEL` / `FSTYPE=apfs`）および `apfsutil`（`detect_apfs_volume_id`）を用いて `Data` ボリューム（`* - Data`）を優先選択し、`--vol N` による手動指定にも対応します。
@@ -186,7 +202,7 @@ Apple Silicon は CPU と Asahi AGX GPU で物理 LPDDR メモリを共有する
 
 ## 8. `Command` キー同期とフロスト HUD (`keyd` + `swayosd`)
 
-ソース: [`input/keyd/default.conf`](silicyos-build/input/keyd/default.conf) | [`mac-mode.conf`](silicyos-build/input/keyd/mac-mode.conf) | [`pc-mode.conf`](silicyos-build/input/keyd/pc-mode.conf) | [`skel/.config/keyd/app.conf`](silicyos-build/skel/.config/keyd/app.conf) | [`skel/.config/swayosd/`](silicyos-build/skel/.config/swayosd/config.toml)
+ソース: [`input/keyd/default.conf`](../silicyos-build/input/keyd/default.conf) | [`mac-mode.conf`](../silicyos-build/input/keyd/mac-mode.conf) | [`pc-mode.conf`](../silicyos-build/input/keyd/pc-mode.conf) | [`skel/.config/keyd/app.conf`](../silicyos-build/skel/.config/keyd/app.conf) | [`skel/.config/swayosd/`](../silicyos-build/skel/.config/swayosd/config.toml)
 
 ### キーボード設計 (`keyd`)
 - `/etc/keyd/` 配下には有効な `default.conf` のみを配置し（プリセットは `/usr/share/silicyos/keyd/` に隔離）、設定重複を回避しています。

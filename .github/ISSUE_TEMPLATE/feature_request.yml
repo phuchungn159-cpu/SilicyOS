@@ -1,0 +1,19 @@
+name: Feature Request
+description: Propose an improvement aligned with Apple Silicon & Minimalist Titanium design
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the hardware, kernel, storage, or UX improvement.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Footprint & Battery Impact
+      description: Explain expected RAM, disk, and power-draw impact.
+    validations:
+      required: true
