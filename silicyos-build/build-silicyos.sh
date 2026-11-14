@@ -141,10 +141,12 @@ arch-chroot "${STAGE_ROOT}" /bin/bash -c "
     fi
     pacman-key --populate archlinuxarm asahi-alarm asahi 2>/dev/null || pacman-key --populate 2>/dev/null || true
     pacman -Sy --noconfirm
-    pacman -Rdd --noconfirm systemd-resolvconf 2>/dev/null || true
+    for conflict_pkg in systemd-resolvconf linux-aarch64 linux-aarch64-headers; do
+        pacman -Rdd --noconfirm \"\${conflict_pkg}\" 2>/dev/null || true
+    done
     AVAIL_PKGS=\$(comm -12 <(pacman -Slq | sort -u) <(printf '%s\n' ${PKG_LIST[*]} | sort -u))
     if [[ -n \"\${AVAIL_PKGS}\" ]]; then
-        yes | pacman -Syu --needed \${AVAIL_PKGS}
+        yes | pacman -Syu --needed --ask 4 \${AVAIL_PKGS}
     fi
     if ! command -v apfs-fuse >/dev/null 2>&1 && ! command -v fsapfsmount >/dev/null 2>&1; then
         echo '[INFO] apfs-fuse not found in pacman binary repos; building Read-Only APFS FUSE driver from source...'
