@@ -154,7 +154,7 @@ arch-chroot "${STAGE_ROOT}" /bin/bash -c "
         rm -rf /tmp/apfs-fuse-src
         if git clone --depth 1 https://github.com/sgan81/apfs-fuse.git /tmp/apfs-fuse-src; then
             git -C /tmp/apfs-fuse-src submodule update --init --recursive --depth 1
-            cmake -S /tmp/apfs-fuse-src -B /tmp/apfs-fuse-src/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DUSE_FUSE3=ON
+            cmake -S /tmp/apfs-fuse-src -B /tmp/apfs-fuse-src/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_FLAGS=\"-include cstdint\" -DUSE_FUSE3=ON
             cmake --build /tmp/apfs-fuse-src/build -j\"\$(nproc)\"
             install -Dm755 /tmp/apfs-fuse-src/build/apfs-fuse /usr/local/bin/apfs-fuse
             if [ -f /tmp/apfs-fuse-src/build/apfsutil ]; then
@@ -454,11 +454,17 @@ fi
 
 arch-chroot "${MNT_DIR}" bootctl --esp-path=/boot/efi --no-variables install || true
 
-# Copy kernel and initramfs to ESP so systemd-boot / U-Boot can load them directly
-cp -f "${MNT_DIR}/boot/Image" "${MNT_DIR}/boot/efi/Image" 2>/dev/null || \
-cp -f "${MNT_DIR}/boot/vmlinuz-"* "${MNT_DIR}/boot/efi/Image" 2>/dev/null || true
-cp -f "${MNT_DIR}/boot/initramfs-"*.img "${MNT_DIR}/boot/efi/initramfs-linux.img" 2>/dev/null || true
+# Copy kernel, initramfs, U-Boot and stage-1 m1n1 to ESP so systemd-boot / U-Boot / asahi-installer can load them directly
+if [[ -f "${MNT_DIR}/boot/Image" ]]; then
+    cp -f "${MNT_DIR}/boot/Image" "${MNT_DIR}/boot/efi/Image"
+else
+    VMLINUZ_SRC="$(find "${MNT_DIR}/boot" -maxdepth 1 -name 'vmlinuz-*' | sort -V | head -n 1)"
+    [[ -n "${VMLINUZ_SRC}" ]] && cp -f "${VMLINUZ_SRC}" "${MNT_DIR}/boot/efi/Image" || true
+fi
+INITRAMFS_SRC="$(find "${MNT_DIR}/boot" -maxdepth 1 -name 'initramfs-*.img' ! -name '*-fallback.img' | sort -V | head -n 1)"
+[[ -n "${INITRAMFS_SRC}" ]] && cp -f "${INITRAMFS_SRC}" "${MNT_DIR}/boot/efi/initramfs-linux.img" || true
 cp -f "${MNT_DIR}/usr/lib/asahi-boot/u-boot-nodtb.bin" "${MNT_DIR}/boot/efi/u-boot-nodtb.bin" 2>/dev/null || true
+cp -f "${MNT_DIR}/usr/lib/asahi-boot/m1n1.bin" "${MNT_DIR}/boot/efi/m1n1.bin" 2>/dev/null || true
 install -Dm644 "${SCRIPT_DIR}/branding/silicyos-boot.bmp" "${MNT_DIR}/boot/efi/loader/silicyos-boot.bmp"
 install -Dm644 "${SCRIPT_DIR}/branding/silicyos-boot.png" "${MNT_DIR}/boot/efi/loader/silicyos-boot.png"
 install -Dm644 "${SCRIPT_DIR}/branding/silicyos-logo.svg" "${MNT_DIR}/boot/efi/loader/silicyos-logo.svg"
