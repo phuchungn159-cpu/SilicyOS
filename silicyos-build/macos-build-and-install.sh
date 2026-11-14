@@ -19,26 +19,36 @@ if ! command -v limactl >/dev/null 2>&1; then
     brew install lima
 fi
 
-# 1. Start or create ARM64 builder VM with writable project mount
+# 1. Start or create ARM64 builder VM with non-overlapping writable project mount
 if ! limactl list -q | grep -qx "${VM_NAME}"; then
     echo "[1/4] Tạo máy ảo Linux ARM64 (${VM_NAME}) trên Apple Virtualization.framework..."
-    limactl start --name="${VM_NAME}" --vm-type=vz --cpus=4 --memory=4 --disk=24 \
-        --mount="${PROJECT_ROOT}:w" --tty=false template:debian-13
+    limactl start --name="${VM_NAME}" --vm-type=vz --cpus=4 --memory=4 --disk=32 \
+        --mount-only="${PROJECT_ROOT}:w" --tty=false template:debian-13
 else
     echo "[1/4] Khởi động máy ảo ${VM_NAME}..."
     limactl start "${VM_NAME}" --tty=false || true
 fi
 
-# 2. Bootstrap Arch Linux ARM64 chroot & execute build-silicyos.sh inside VM
+# 2. Bootstrap Arch Linux ARM64 chroot & execute build-silicyos.sh inside VM's native ext4
 echo "[2/4] Thiết lập môi trường Arch Linux ARM64 + Asahi ALARM và chạy build-silicyos.sh..."
-limactl shell --workdir "${SCRIPT_DIR}" "${VM_NAME}" sudo bash -c '
+limactl shell "${VM_NAME}" sudo bash -c "
     set -euo pipefail
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
     apt-get install -y arch-install-scripts pacman-package-manager btrfs-progs dosfstools zip unzip rsync zstd curl jq udev
+    rm -rf /var/tmp/silicyos-build /tmp/silicyos-apple-silicon.zip
+    mkdir -p /var/tmp/silicyos-build
+    rsync -a --exclude='silicyos-apple-silicon.zip' '${SCRIPT_DIR}/' /var/tmp/silicyos-build/
+    cd /var/tmp/silicyos-build
     ./verify-silicyos.sh
     ./build-silicyos.sh
-'
+    cp -f /var/tmp/silicyos-build/silicyos-apple-silicon.zip /tmp/silicyos-apple-silicon.zip
+    chmod 0644 /tmp/silicyos-apple-silicon.zip
+    rm -rf /var/tmp/silicyos-build
+"
+
+# Copy built archive back to macOS host reliably (works regardless of virtiofs mount mode)
+limactl cp "${VM_NAME}:/tmp/silicyos-apple-silicon.zip" "${OUT_ZIP}"
 
 # 3. Stop and remove temporary builder VM to reclaim all APFS space before partitioning
 echo "[3/4] Dọn dẹp máy ảo tạm (${VM_NAME}) để trả lại dung lượng trống cho APFS..."

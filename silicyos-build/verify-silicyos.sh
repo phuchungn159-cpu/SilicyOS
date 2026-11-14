@@ -37,8 +37,8 @@ section() {
     printf "${C_CYAN}==============================================================================${C_RESET}\n"
 }
 
-# Ensure executable permissions on all project scripts
-chmod +x \
+# Ensure executable permissions on writable project scripts (skip cleanly on read-only mounts)
+for _exec_target in \
     "${SCRIPT_DIR}/build-silicyos.sh" \
     "${SCRIPT_DIR}/verify-silicyos.sh" \
     "${SCRIPT_DIR}/install-silicyos-macos.sh" \
@@ -49,7 +49,11 @@ chmod +x \
     "${SCRIPT_DIR}/scripts/silicy-center" \
     "${SCRIPT_DIR}/services/systemd-diet.sh" \
     "${SCRIPT_DIR}/installer/silicy-setup-tui.sh" \
-    "${SCRIPT_DIR}/cachy-arm64/silicy-core-tuning/ananicy-cpp/silicy-pe-enforcer.sh"
+    "${SCRIPT_DIR}/cachy-arm64/silicy-core-tuning/ananicy-cpp/silicy-pe-enforcer.sh"; do
+    if [[ ! -x "${_exec_target}" && -w "${_exec_target}" ]]; then
+        chmod +x "${_exec_target}" || true
+    fi
+done
 
 # ==============================================================================
 # 1. CROSS-PHASE PATH DRIFT & BASH/ZSH SYNTAX AUDIT
