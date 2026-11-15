@@ -417,7 +417,9 @@ echo "==========================================================================
 truncate -s "${ESP_SIZE_MB}M" "${ESP_IMG}"
 truncate -s "${ROOTFS_SIZE_MB}M" "${ROOTFS_IMG}"
 
-mkfs.fat -F 32 -n "SILICY_EFI" "${ESP_IMG}"
+EFI_VOL_ID="$(grep -m1 '"volume_id"' "${SCRIPT_DIR}/installer/installer_data.json" | sed -E 's/.*"0x([0-9a-fA-F]+)".*/\1/' || true)"
+[[ "${EFI_VOL_ID}" =~ ^[0-9a-fA-F]{8}$ ]] || EFI_VOL_ID="5171C905"
+mkfs.fat -F 32 -i "${EFI_VOL_ID}" -n "SILICY_EFI" "${ESP_IMG}"
 
 LOOP_ESP="$(losetup --find --show "${ESP_IMG}")"
 LOOP_ROOT="$(losetup --find --show "${ROOTFS_IMG}")"
@@ -439,7 +441,7 @@ UUID=${ROOT_UUID}  /home                   btrfs  ${BTRFS_OPTS},subvol=@home    
 UUID=${ROOT_UUID}  /var/cache/pacman/pkg   btrfs  ${BTRFS_OPTS},subvol=@pkg       0 0
 UUID=${ROOT_UUID}  /var/log                btrfs  ${BTRFS_OPTS},subvol=@log       0 0
 UUID=${ROOT_UUID}  /.snapshots             btrfs  ${BTRFS_OPTS},subvol=@snapshots 0 0
-UUID=${EFI_UUID}   /boot/efi               vfat   rw,noatime,fmask=0022,dmask=0022,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro 0 2
+UUID=${EFI_UUID}   /boot/efi               vfat   rw,noatime,nofail,x-systemd.device-timeout=10,fmask=0022,dmask=0022,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro 0 2
 tmpfs              /tmp                    tmpfs  rw,nosuid,nodev,noatime,size=1G,mode=1777 0 0
 EOF
 

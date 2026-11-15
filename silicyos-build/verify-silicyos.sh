@@ -170,7 +170,7 @@ fi
 # Verify essential packages (including new exclusive feature dependencies) in packages.silicy
 ESSENTIAL_PKGS=(
     zsh mkinitcpio btrfs-progs compsize pacman-contrib wireless-regdb
-    asahi-fwextract m1n1 uboot-asahi niri hyprland waybar fuzzel kitty
+    asahi-fwextract m1n1 uboot-asahi niri hyprland swaybg waybar fuzzel kitty
     greetd zram-generator earlyoom ananicy-cpp
     keyd python jq swayosd wlsunset libnotify fuse3 apfs-fuse clang lld
 )
@@ -688,10 +688,14 @@ fi
 if grep -q "leftmeta = layer(meta)" "${SCRIPT_DIR}/input/keyd/default.conf" && \
    grep -q "^\[meta:M\]" "${SCRIPT_DIR}/input/keyd/default.conf" && \
    grep -q "leftmeta = layer(meta)" "${SCRIPT_DIR}/input/keyd/mac-mode.conf" && \
-   grep -q "^\[meta:M\]" "${SCRIPT_DIR}/input/keyd/mac-mode.conf"; then
-    log_pass "keyd default.conf & mac-mode.conf use [meta:M] layer matching keyd-application-mapper"
+   grep -q "^\[meta:M\]" "${SCRIPT_DIR}/input/keyd/mac-mode.conf" && \
+   ! grep -Eq '^[[:space:]]*return[[:space:]]*=' "${SCRIPT_DIR}/input/keyd/default.conf" && \
+   ! grep -Eq '^[[:space:]]*return[[:space:]]*=' "${SCRIPT_DIR}/input/keyd/mac-mode.conf" && \
+   ! grep -Eq '^[[:space:]]*(t|q|w|f|r|l|c|v)[[:space:]]*=' "${SCRIPT_DIR}/input/keyd/default.conf" && \
+   ! grep -Eq '^[[:space:]]*(t|q|w|f|r|l|c|v)[[:space:]]*=' "${SCRIPT_DIR}/input/keyd/mac-mode.conf"; then
+    log_pass "keyd default.conf & mac-mode.conf use [meta:M] without invalid 'return' key or Niri shortcut shadowing"
 else
-    log_fail "keyd default.conf / mac-mode.conf layer name mismatch with app.conf"
+    log_fail "keyd default.conf / mac-mode.conf layer mismatch, invalid 'return' key, or Niri shortcut collision"
 fi
 
 STAR_LINE="$(grep -n '^\[\*\]' "${SCRIPT_DIR}/skel/.config/keyd/app.conf" | head -n1 | cut -d: -f1)"
@@ -712,10 +716,12 @@ if grep -q "/usr/share/silicyos/keyd/mac-mode.conf" "${SCRIPT_DIR}/build-silicyo
    grep -q "apfs-fuse.git" "${SCRIPT_DIR}/build-silicyos.sh" && \
    grep -q "CMAKE_POLICY_VERSION_MINIMUM=3.5" "${SCRIPT_DIR}/build-silicyos.sh" && \
    grep -q "/usr/local/bin/apfsutil" "${SCRIPT_DIR}/build-silicyos.sh" && \
+   grep -q 'mkfs\.fat -F 32 -i "\${EFI_VOL_ID}"' "${SCRIPT_DIR}/build-silicyos.sh" && \
+   grep -q 'nofail,x-systemd\.device-timeout=' "${SCRIPT_DIR}/build-silicyos.sh" && \
    grep -q "tmpfiles.d/silicyos.conf" "${SCRIPT_DIR}/build-silicyos.sh"; then
-    log_pass "build-silicyos.sh isolates keyd presets, enables fuse, & builds apfs-fuse+apfsutil with CMake 4+ policy floor"
+    log_pass "build-silicyos.sh preserves ESP volume_id (5171C905), marks /boot/efi nofail, isolates keyd presets, & builds apfs-fuse"
 else
-    log_fail "build-silicyos.sh missing keyd preset isolation, fuse.conf, tmpfiles.d, or apfs-fuse/apfsutil CMake policy"
+    log_fail "build-silicyos.sh missing ESP volume_id sync, /boot/efi nofail, keyd isolation, fuse.conf, or apfs-fuse CMake policy"
 fi
 
 if ! grep -q "ctrl:swap_lwin_lctl" "${SCRIPT_DIR}/installer/silicy-setup-tui.sh" && \
@@ -826,11 +832,15 @@ fi
 if grep -q "silicy-ctl power-profile" "${SCRIPT_DIR}/cachy-arm64/silicy-core-tuning/ananicy-cpp/silicy-pe-enforcer.sh" && \
    ! grep -q "/var/run/keyd.socket" "${SCRIPT_DIR}/cachy-arm64/silicy-core-tuning/ananicy-cpp/silicy-pe-enforcer.sh" && \
    grep -q '"decoration:blur:enabled", (char \*)' "${SCRIPT_DIR}/silicy-ctl/silicy-ctl.c" && \
-   grep -q "silicy-kb-mode" "${SCRIPT_DIR}/skel/.config/niri/config.kdl" && \
+   ! grep -q "keyd-application-mapper" "${SCRIPT_DIR}/skel/.config/niri/config.kdl" && \
+   ! grep -Eq '^[[:space:]]*on([[:space:]]|$)' <(sed -n '/^[[:space:]]*border[[:space:]]*{/,/^[[:space:]]*}/p' "${SCRIPT_DIR}/skel/.config/niri/config.kdl") && \
+   grep -q 'spawn "kitty"' "${SCRIPT_DIR}/skel/.config/niri/config.kdl" && \
+   grep -q 'spawn "fuzzel"' "${SCRIPT_DIR}/skel/.config/niri/config.kdl" && \
+   grep -q 'spawn-at-startup "swaybg"' "${SCRIPT_DIR}/skel/.config/niri/config.kdl" && \
    grep -q "silicy-kb-mode" "${SCRIPT_DIR}/skel/.config/hypr/hyprland.conf"; then
-    log_pass "Boot persistence, keyd.socket group preservation, & split hyprctl keyword argv verified"
+    log_pass "Boot persistence, vanilla Niri valid KDL (no border.on / no mapper hijack / swaybg+waybar), & split hyprctl verified"
 else
-    log_fail "Missing boot power-profile restore, keyd.socket preservation, split hyprctl argv, or PC-mode guard"
+    log_fail "Missing boot power-profile restore, vanilla Niri KDL validity/swaybg checks, split hyprctl argv, or PC-mode guard"
 fi
 
 if grep -q "max_volume = 100" "${SCRIPT_DIR}/skel/.config/swayosd/config.toml" && \

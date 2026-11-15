@@ -85,6 +85,7 @@ ananicy-cpp
 # --- Wayland Compositors, Keyd Remapper, SwayOSD HUD & Seat Management ---
 niri
 hyprland
+swaybg
 seatd
 xdg-desktop-portal-wlr
 xdg-desktop-portal-hyprland
